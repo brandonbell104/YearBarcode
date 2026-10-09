@@ -1,0 +1,33 @@
+{
+  "identifier" : "5F3A9C1E",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "6740000001",
+      "localizations" : [
+        {
+          "description" : "Remove the small watermark from every Year Barcode poster.",
+          "displayName" : "Remove Watermark",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.yearbarcode.app.removewatermark",
+      "referenceName" : "Remove Watermark",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

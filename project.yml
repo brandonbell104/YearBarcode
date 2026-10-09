@@ -1,0 +1,62 @@
+# Generate the Xcode project with XcodeGen: `xcodegen generate`
+name: YearBarcode
+options:
+  bundleIdPrefix: com.yearbarcode
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  YearBarcodeCore:
+    path: Packages/YearBarcodeCore
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  YearBarcode:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+    dependencies:
+      - package: YearBarcodeCore
+      - sdk: libsqlite3.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yearbarcode.app
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        SUPPORTS_MACCATALYST: NO
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Year Barcode
+        ITSAppUsesNonExemptEncryption: false
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSPhotoLibraryUsageDescription: >-
+          Year Barcode reads your photos on this iPhone to calculate their average colors.
+          Your photo library is not uploaded.
+        # Continued-processing tasks are submitted with a unique suffix per run.
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).generation.*
+        UIBackgroundModes:
+          - processing
+
+schemes:
+  YearBarcode:
+    build:
+      targets:
+        YearBarcode: all
+    run:
+      config: Debug
+      storeKitConfiguration: App/StoreKit/Products.storekit
