@@ -112,7 +112,7 @@ final class PhotoLibraryService: @unchecked Sendable {
         let options = PHImageRequestOptions()
         options.version = .current
         options.deliveryMode = .highQualityFormat
-        options.resizeMode = .accurate
+        options.resizeMode = .exact
         options.isNetworkAccessAllowed = allowNetwork
         options.isSynchronous = false
 
