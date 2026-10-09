@@ -52,6 +52,10 @@ swift test
 
 CI (`.github/workflows/ci.yml`) runs the core tests on Linux and macOS and builds the app for the iOS Simulator.
 
+## Installing without a Mac (TestFlight)
+
+`.github/workflows/testflight.yml` builds the app on a GitHub-hosted Mac, signs it with an Apple-managed (cloud) distribution certificate and uploads it to App Store Connect. Set the four secrets listed at the top of that file, run the **TestFlight** workflow from the Actions tab, then install the build with the TestFlight app on your iPhone.
+
 ## How the spec maps to code
 
 | Spec requirement | Where |
