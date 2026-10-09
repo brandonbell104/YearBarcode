@@ -30,6 +30,32 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
     public var missingDateCount: Int
     public var invalidDateCount: Int
 
+    public init(
+        id: UUID,
+        year: Int,
+        cutoff: Date,
+        timeZoneIdentifier: String,
+        settings: ArtworkSettings,
+        access: LibraryAccess,
+        analysisVersion: Int,
+        layoutVersion: Int,
+        entries: [ManifestEntry],
+        missingDateCount: Int,
+        invalidDateCount: Int
+    ) {
+        self.id = id
+        self.year = year
+        self.cutoff = cutoff
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.settings = settings
+        self.access = access
+        self.analysisVersion = analysisVersion
+        self.layoutVersion = layoutVersion
+        self.entries = entries
+        self.missingDateCount = missingDateCount
+        self.invalidDateCount = invalidDateCount
+    }
+
     public var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? TimeZone(identifier: "UTC")! }
     public var calendar: YearCalendar { YearCalendar(timeZone: timeZone) }
 }
