@@ -17,6 +17,34 @@ Status: `[ ]` to do · `[~]` in progress · `[x]` done
 - Use the same wording on the Artwork screen's Layout section, where the included count is already known exactly.
 - Every Day help text stays as it is (one stripe per day; empty days white).
 
+### 4. [ ] Save PNG to the Photos library
+- Add **Save to Photos** next to Save to Files and Share. It saves the PNG file itself (lossless, 300 PPI), not a re-encoded copy.
+- Needs "add only" photo permission (`NSPhotoLibraryAddUsageDescription`); ask the first time the user saves.
+- Report success or failure inline (e.g. "Saved to Photos").
+
+### 5. [ ] Move, resize and rotate border photos
+- Replace the fixed slots with free placement: drag to move, pinch to resize, two-finger twist to rotate, directly on the poster preview. Keep the existing pan/zoom crop inside each photo.
+- Rules: photos stay on the poster and never cover the barcode, year, count or watermark. A placement that would overlap snaps back.
+- Store position, size and rotation as fractions of the poster so they look the same on every print size, and use them in the full-resolution export.
+- Optional: snap to center lines and to equal spacing; a "Reset layout" button.
+- Changes the spec's "tidy row / side borders" rule into a default starting layout.
+
+### 6. [ ] Border background color
+- Color choice for the poster background (currently white): a few presets (white, off-white, black, a few neutrals) plus a full color picker.
+- Year, count and watermark text switch between dark and light automatically so they stay readable.
+- Applies to the preview and the export. Saved per artwork.
+- Question: Every Day empty days are drawn white. After item 7 they disappear, so this mainly matters if gaps come back as an option.
+
+### 7. [ ] Every Day: no white gaps
+- Today every calendar day gets a slot and days without photos are white (spec rule).
+- Change: drop days without photos, so the barcode is only days that have photos, edge to edge with equal-width stripes. Stripes stay in date order.
+- Update the mode help text and the Artwork summary (e.g. "312 days with photos").
+- Assumption to confirm: "truncate" means remove *every* empty day, not just the empty stretch at the start or end of the year. Could keep "Show empty days" as an option.
+
+### 8. [ ] Bug: Artwork "Details" dropdown cuts off with "…"
+- Cause: the `DisclosureGroup` sits inside the same list row as the title (`App/Sources/Views/ArtworkView.swift`). List rows don't resize for a nested disclosure, so the expanded text is truncated and the row looks grayed out.
+- Fix: put Details in its own row (or its own Section), let the text wrap (`fixedSize(horizontal: false, vertical: true)`), and stop the row from highlighting on tap.
+
 ### 3. [ ] Buy a print tab
 Goal: order a physical poster of the finished artwork from inside the app.
 
