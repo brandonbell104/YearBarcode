@@ -81,6 +81,18 @@ public enum SnapshotBuilder {
         return years.sorted(by: >)
     }
 
+    /// Number of photos per year (valid capture dates only, no future years).
+    public static func yearCounts<S: Sequence>(captureDates: S, now: Date, timeZone: TimeZone) -> [Int: Int] where S.Element == Date? {
+        let calendar = YearCalendar(timeZone: timeZone)
+        let currentYear = calendar.year(of: now)
+        var counts: [Int: Int] = [:]
+        for case let date? in captureDates where date >= earliestValidDate && date <= now {
+            let year = calendar.year(of: date)
+            if year <= currentYear { counts[year, default: 0] += 1 }
+        }
+        return counts
+    }
+
     /// Freezes asset membership for a generation.
     ///
     /// - Includes capture dates from January 1 of `year` through the end of the

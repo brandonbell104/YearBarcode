@@ -23,16 +23,22 @@ struct YearsView: View {
                 }
             }
 
-            Section("Year") {
+            Section {
                 if model.isLoadingYears && model.years.isEmpty {
                     ProgressView()
                 } else if model.years.isEmpty {
                     Text("No dated photos found.").foregroundStyle(.secondary)
                 } else {
                     Picker("Year", selection: $selectedYear) {
-                        ForEach(model.years, id: \.self) { Text(String($0)).tag(Optional($0)) }
+                        ForEach(model.years, id: \.self) { year in
+                            Text(yearLabel(year)).tag(Optional(year))
+                        }
                     }
                 }
+            } header: {
+                Text("Year")
+            } footer: {
+                Text("Counts are photos in your library. Screenshots, documents, duplicates and similar images are left out when you generate, so the final number can be lower.")
             }
 
             Section {
@@ -41,6 +47,17 @@ struct YearsView: View {
                 }
                 .pickerStyle(.segmented)
                 Text(settings.mode.helpText).font(.footnote).foregroundStyle(.secondary)
+                if settings.mode == .everyPhoto, let year = selectedYear, let count = model.yearCounts[year] {
+                    Text(ArtworkText.capacityHint(
+                        year: year,
+                        photoCount: count,
+                        capacity: PosterLayout(printSize: settings.printSize, orientation: settings.orientation).maxGroups,
+                        size: settings.printSize,
+                        exact: false
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
                 Picker("Orientation", selection: $settings.orientation) {
                     ForEach(Orientation.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
@@ -91,6 +108,13 @@ struct YearsView: View {
         .onChange(of: model.years, initial: true) { _, years in
             if selectedYear == nil || !(years.contains(selectedYear!)) { selectedYear = years.first }
         }
+    }
+}
+
+extension YearsView {
+    func yearLabel(_ year: Int) -> String {
+        guard let count = model.yearCounts[year] else { return String(year) }
+        return "\(year) · \(ArtworkText.photoCount(count))"
     }
 }
 

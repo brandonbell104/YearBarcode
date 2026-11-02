@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Photos
 import UIKit
 import YearBarcodeCore
 
@@ -8,12 +9,14 @@ import YearBarcodeCore
 @MainActor
 @Observable
 final class ArtworkSession {
-    enum ExportPurpose { case save, share }
+    enum ExportPurpose { case files, photos, share }
 
     enum ExportState {
         case idle
         case exporting(Double)
+        /// Waiting for the Files or Share sheet.
         case ready(URL, ExportPurpose)
+        case savedToPhotos
         case failed(String)
     }
 
@@ -108,12 +111,32 @@ final class ArtworkSession {
             }
             artwork.exportPath = url.path
             model.save(artwork)
-            exportState = .ready(url, purpose)
+            if purpose == .photos {
+                try await Self.saveToPhotos(url)
+                exportState = .savedToPhotos
+            } else {
+                exportState = .ready(url, purpose)
+            }
         } catch BorderPhotoError.unavailable(let assetID) {
             replacementNeeded = assetID
             exportState = .failed(BorderPhotoError.unavailable(assetID: assetID).localizedDescription)
+        } catch PhotosSaveError.notAllowed {
+            exportState = .failed("Year Barcode isn't allowed to add photos. Allow it in Settings → Privacy & Security → Photos.")
         } catch {
             exportState = .failed("The PNG could not be created: \(error.localizedDescription)")
+        }
+    }
+
+    enum PhotosSaveError: Error { case notAllowed }
+
+    /// Adds the PNG file itself to the library (lossless, keeps its 300 PPI tag).
+    private static func saveToPhotos(_ url: URL) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else { throw PhotosSaveError.notAllowed }
+        try await PHPhotoLibrary.shared().performChanges {
+            let options = PHAssetResourceCreationOptions()
+            options.originalFilename = url.lastPathComponent
+            PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: url, options: options)
         }
     }
 }

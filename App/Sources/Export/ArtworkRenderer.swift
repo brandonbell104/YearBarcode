@@ -23,32 +23,37 @@ struct ArtworkInput: Sendable {
 enum ArtworkRenderer {
     // MARK: Preview
 
-    /// Low-resolution preview from logical color data.
-    static func preview(_ input: ArtworkInput, longEdge: Int = 1500, borderImages: [String: UIImage]) -> CGImage? {
-        let full = input.settings.printSize.canvas(input.settings.orientation)
+    static func previewCanvas(for settings: ArtworkSettings, longEdge: Int = 1500) -> PixelSize {
+        let full = settings.printSize.canvas(settings.orientation)
         let scale = Double(longEdge) / Double(full.long)
-        let canvas = PixelSize(width: Int((Double(full.width) * scale).rounded()), height: Int((Double(full.height) * scale).rounded()))
+        return PixelSize(width: Int((Double(full.width) * scale).rounded()), height: Int((Double(full.height) * scale).rounded()))
+    }
+
+    /// Low-resolution preview from logical color data. `includePhotos: false`
+    /// leaves the border photos out (the arrange editor draws them live on top).
+    static func preview(_ input: ArtworkInput, longEdge: Int = 1500, borderImages: [String: UIImage], includePhotos: Bool = true) -> CGImage? {
+        let canvas = previewCanvas(for: input.settings, longEdge: longEdge)
         let layout = PosterLayout(canvas: canvas, orientation: input.settings.orientation)
         let colors = StripeGeometry.previewColors(input.barcode.stripes, pixels: layout.barcodeLength)
-        let overlays = labelOverlays(input, layout: layout)
-            + photoOverlays(input.borderPhotos, layout: layout, images: borderImages)
-        let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays)
+        var overlays = labelOverlays(input, layout: layout)
+        if includePhotos { overlays += photoOverlays(input.borderPhotos, layout: layout, images: borderImages) }
+        let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: input.settings.background)
         return PixelSampler.cgImage(rgb: renderer.renderImage(), width: canvas.width, height: canvas.height)
     }
 
     // MARK: Export
 
     /// Streams the full-resolution PNG. Border photos are fetched at the
-    /// resolution their slots need; a missing one fails instead of being replaced.
+    /// resolution their frames need; a missing one fails instead of being replaced.
     static func exportPNG(_ input: ArtworkInput, library: PhotoLibraryService, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let layout = PosterLayout(printSize: input.settings.printSize, orientation: input.settings.orientation)
-        let slots = layout.photoSlots(count: input.borderPhotos.count)
 
         var images: [String: UIImage] = [:]
-        for (photo, slot) in zip(input.borderPhotos, slots) {
+        for (index, photo) in input.borderPhotos.enumerated() {
             guard let asset = library.asset(id: photo.assetID) else { throw BorderPhotoError.unavailable(assetID: photo.assetID) }
+            let frame = layout.frame(for: layout.resolvedPlacement(for: photo, index: index, count: input.borderPhotos.count))
             let zoom = min(max(photo.zoom, 1), BorderPhoto.maxZoom)
-            let target = CGSize(width: Double(slot.width) * zoom * 1.25, height: Double(slot.height) * zoom * 1.25)
+            let target = CGSize(width: frame.width * zoom * 1.25, height: frame.height * zoom * 1.25)
             do {
                 images[photo.assetID] = try await library.image(for: asset, targetSize: target, contentMode: .aspectFill)
             } catch {
@@ -66,8 +71,9 @@ enum ArtworkRenderer {
         let overlays = labelOverlays(input, layout: layout) + photoOverlays(input.borderPhotos, layout: layout, images: images)
         images.removeAll()
         let colors = input.barcode.stripes.map(\.rgb8)
+        let background = input.settings.background
         try await Task.detached(priority: .userInitiated) {
-            let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays)
+            let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: background)
             try renderer.writePNG(to: url, progress: progress)
         }.value
         return url
@@ -75,19 +81,25 @@ enum ArtworkRenderer {
 
     // MARK: Overlays
 
+    /// Year, count and watermark, in dark or light text depending on the background.
     static func labelOverlays(_ input: ArtworkInput, layout: PosterLayout) -> [RasterOverlay] {
+        let background = input.settings.background
+        let light = background.prefersLightText
+        let primary = light ? UIColor(white: 0.95, alpha: 1) : UIColor(white: 0.12, alpha: 1)
+        let secondary = light ? UIColor(white: 0.8, alpha: 1) : UIColor(white: 0.3, alpha: 1)
+        let tertiary = light ? UIColor(white: 0.65, alpha: 1) : UIColor(white: 0.55, alpha: 1)
         var overlays = [
-            text(String(input.year), in: layout.yearLabel, weight: .semibold, color: UIColor(white: 0.12, alpha: 1)),
-            text(ArtworkText.photoCount(input.barcode.includedPhotoCount), in: layout.countLabel, weight: .regular, color: UIColor(white: 0.3, alpha: 1)),
+            text(String(input.year), in: layout.yearLabel, weight: .semibold, color: primary, background: background),
+            text(ArtworkText.photoCount(input.barcode.includedPhotoCount), in: layout.countLabel, weight: .regular, color: secondary, background: background),
         ]
         if input.showWatermark {
-            overlays.append(text(PosterLayout.watermarkText, in: layout.watermark, weight: .regular, color: UIColor(white: 0.55, alpha: 1)))
+            overlays.append(text(PosterLayout.watermarkText, in: layout.watermark, weight: .regular, color: tertiary, background: background))
         }
         return overlays
     }
 
-    static func text(_ string: String, in rect: PixelRect, weight: UIFont.Weight, color: UIColor) -> RasterOverlay {
-        PixelSampler.overlay(rect: rect) { _, size in
+    static func text(_ string: String, in rect: PixelRect, weight: UIFont.Weight, color: UIColor, background: RGB8) -> RasterOverlay {
+        PixelSampler.overlay(rect: rect, background: background) { _, size in
             var font = UIFont.systemFont(ofSize: size.height / 1.25, weight: weight)
             let paragraph = NSMutableParagraphStyle()
             paragraph.alignment = .center
@@ -103,14 +115,53 @@ enum ArtworkRenderer {
         }
     }
 
+    /// Border photos at their (possibly rotated) placements. Each overlay is the
+    /// photo's bounding box with transparent corners, so photos can overlap
+    /// each other and blend onto the background.
     static func photoOverlays(_ photos: [BorderPhoto], layout: PosterLayout, images: [String: UIImage]) -> [RasterOverlay] {
-        zip(photos, layout.photoSlots(count: photos.count)).compactMap { photo, slot in
+        let canvas = PixelRect(x: 0, y: 0, width: layout.canvas.width, height: layout.canvas.height)
+        return photos.enumerated().compactMap { index, photo in
             guard let image = images[photo.assetID] else { return nil }
-            return PixelSampler.overlay(rect: slot) { _, size in
-                let crop = photo.cropRect(imageWidth: image.size.width, imageHeight: image.size.height, slotAspect: size.width / size.height)
-                let scale = size.width / crop.width
-                image.draw(in: CGRect(x: -crop.x * scale, y: -crop.y * scale, width: image.size.width * scale, height: image.size.height * scale))
+            let frame = layout.frame(for: layout.resolvedPlacement(for: photo, index: index, count: photos.count))
+            let box = clamp(frame.boundingBox, to: canvas)
+            guard box.width > 0, box.height > 0 else { return nil }
+            return PixelSampler.transparentOverlay(rect: box) { context, _ in
+                context.translateBy(x: frame.centerX - Double(box.x), y: frame.centerY - Double(box.y))
+                context.rotate(by: frame.rotation)
+                let target = CGRect(x: -frame.width / 2, y: -frame.height / 2, width: frame.width, height: frame.height)
+                context.clip(to: target)
+                drawCropped(image, photo: photo, in: target)
             }
         }
+    }
+
+    /// Draws `image` cropped per the photo's zoom/center to fill `target`.
+    static func drawCropped(_ image: UIImage, photo: BorderPhoto, in target: CGRect) {
+        let crop = photo.cropRect(imageWidth: image.size.width, imageHeight: image.size.height, slotAspect: target.width / target.height)
+        let scale = target.width / crop.width
+        image.draw(in: CGRect(
+            x: target.minX - crop.x * scale,
+            y: target.minY - crop.y * scale,
+            width: image.size.width * scale,
+            height: image.size.height * scale
+        ))
+    }
+
+    /// The cropped photo as its own image (for on-screen editing).
+    static func croppedImage(_ image: UIImage, photo: BorderPhoto, aspect: Double, longEdge: CGFloat = 600) -> UIImage {
+        let size = aspect >= 1
+            ? CGSize(width: longEdge, height: longEdge / aspect)
+            : CGSize(width: longEdge * aspect, height: longEdge)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            drawCropped(image, photo: photo, in: CGRect(origin: .zero, size: size))
+        }
+    }
+
+    private static func clamp(_ rect: PixelRect, to bounds: PixelRect) -> PixelRect {
+        let x0 = max(rect.x, bounds.x), y0 = max(rect.y, bounds.y)
+        let x1 = min(rect.maxX, bounds.maxX), y1 = min(rect.maxY, bounds.maxY)
+        return PixelRect(x: x0, y: y0, width: max(0, x1 - x0), height: max(0, y1 - y0))
     }
 }

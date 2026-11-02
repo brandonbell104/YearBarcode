@@ -58,13 +58,13 @@ final class PhotoLibraryService: @unchecked Sendable {
         return options
     }
 
-    /// Years represented by accessible capture dates.
-    func availableYears(now: Date, timeZone: TimeZone) -> [Int] {
+    /// Accessible still photos per capture year (before any filtering).
+    func yearCounts(now: Date, timeZone: TimeZone) -> [Int: Int] {
         let assets = PHAsset.fetchAssets(with: stillImageOptions())
         var dates: [Date?] = []
         dates.reserveCapacity(assets.count)
         assets.enumerateObjects { asset, _, _ in dates.append(asset.creationDate) }
-        return SnapshotBuilder.availableYears(captureDates: dates, now: now, timeZone: timeZone)
+        return SnapshotBuilder.yearCounts(captureDates: dates, now: now, timeZone: timeZone)
     }
 
     /// Accessible still images for the year (through the cutoff), plus every

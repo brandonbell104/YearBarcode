@@ -21,6 +21,9 @@ final class AppModel {
 
     var authorization: LibraryAuthorization
     var years: [Int] = []
+    /// Photos in the library per year, before filtering. Missing for years
+    /// that only exist as saved artwork.
+    var yearCounts: [Int: Int] = [:]
     var isLoadingYears = false
     var generations: [GenerationRecord] = []
     var progress: [UUID: JobProgress] = [:]
@@ -67,9 +70,10 @@ final class AppModel {
         isLoadingYears = true
         let library = self.library
         let timeZone = TimeZone.current
-        let fromLibrary = await Task.detached { library.availableYears(now: Date(), timeZone: timeZone) }.value
+        let counts = await Task.detached { library.yearCounts(now: Date(), timeZone: timeZone) }.value
         let saved = generations.map(\.year)
-        years = Array(Set(fromLibrary + saved)).sorted(by: >)
+        yearCounts = counts
+        years = Array(Set(Array(counts.keys) + saved)).sorted(by: >)
         isLoadingYears = false
     }
 

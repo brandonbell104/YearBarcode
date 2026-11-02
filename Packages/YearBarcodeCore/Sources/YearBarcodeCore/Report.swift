@@ -94,12 +94,7 @@ public struct GenerationReport: Sendable {
     /// Stripes for any mode/size/orientation, recomputed from per-photo colors.
     public func barcode(for settings: ArtworkSettings) -> BarcodeData {
         let layout = PosterLayout(printSize: settings.printSize, orientation: settings.orientation)
-        return Grouper.barcode(
-            photos: included,
-            mode: settings.mode,
-            capacity: layout.maxGroups,
-            daySlots: snapshot.calendar.daySlots(year: snapshot.year, cutoff: snapshot.cutoff)
-        )
+        return Grouper.barcode(photos: included, mode: settings.mode, capacity: layout.maxGroups)
     }
 }
 
@@ -126,9 +121,21 @@ public enum ArtworkText {
         case .everyPhoto:
             return data.groupedToFit ? "Some photos were grouped to fit this poster." : nil
         case .everyDay:
-            let empty = data.stripes.filter { $0.sum == nil }.count
-            return empty > 0 ? "\(empty) \(empty == 1 ? "day has" : "days have") no included photos and \(empty == 1 ? "is" : "are") shown in white." : nil
+            let days = data.stripes.count
+            return "\(formatted(days)) \(days == 1 ? "day" : "days") with photos, one stripe each."
         }
+    }
+
+    /// Explains when Every Photo starts combining photos for a poster size.
+    /// - Parameter exact: true when `photoCount` is the final included count;
+    ///   false for a library count taken before filtering.
+    public static func capacityHint(year: Int, photoCount: Int, capacity: Int, size: PrintSize, exact: Bool, locale: Locale = .current) -> String {
+        let fits = "This \(size.shortInches) × \(size.longInches) poster fits \(formatted(capacity, locale: locale)) photos as separate stripes."
+        let has = exact ? "\(formatted(photoCount, locale: locale)) photos are included" : "\(year) has \(formatted(photoCount, locale: locale)) photos"
+        if photoCount > capacity {
+            return "\(fits) \(has), so some neighboring photos from the same day will be combined."
+        }
+        return "\(fits) \(has), so every photo gets its own stripe."
     }
 
     /// "7,842 included photos, 4,860 color groups, 236 excluded."

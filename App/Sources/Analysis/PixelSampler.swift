@@ -38,8 +38,9 @@ enum PixelSampler {
         return rgb
     }
 
-    /// Renders with a drawing closure (UIKit coordinates, origin top-left) into an RGB overlay.
-    static func overlay(rect: PixelRect, draw: (CGContext, CGSize) -> Void) -> RasterOverlay {
+    /// Renders with a drawing closure (UIKit coordinates, origin top-left) into
+    /// an opaque RGB overlay on the given background color.
+    static func overlay(rect: PixelRect, background: RGB8 = .white, draw: (CGContext, CGSize) -> Void) -> RasterOverlay {
         let width = rect.width, height = rect.height
         var pixels = [UInt8](repeating: 255, count: width * height * 4)
         pixels.withUnsafeMutableBytes { buffer in
@@ -47,7 +48,7 @@ enum PixelSampler {
                 data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
                 space: sRGB, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
             ) else { return }
-            context.setFillColor(UIColor.white.cgColor)
+            context.setFillColor(UIColor(background).cgColor)
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             context.interpolationQuality = .high
             context.translateBy(x: 0, y: CGFloat(height))
@@ -59,6 +60,28 @@ enum PixelSampler {
         return RasterOverlay(rect: rect, pixels: rgb(fromRGBX: pixels, width: width, height: height))
     }
 
+    /// Renders onto a transparent canvas and keeps per-pixel coverage, so the
+    /// overlay blends onto whatever is underneath (rotated photos, soft edges).
+    static func transparentOverlay(rect: PixelRect, draw: (CGContext, CGSize) -> Void) -> RasterOverlay {
+        let width = rect.width, height = rect.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return }
+            context.interpolationQuality = .high
+            context.translateBy(x: 0, y: CGFloat(height))
+            context.scaleBy(x: 1, y: -1)
+            UIGraphicsPushContext(context)
+            draw(context, CGSize(width: width, height: height))
+            UIGraphicsPopContext()
+        }
+        var alpha = [UInt8](repeating: 0, count: width * height)
+        for i in 0..<(width * height) { alpha[i] = pixels[i * 4 + 3] }
+        return RasterOverlay(rect: rect, pixels: rgb(fromRGBX: pixels, width: width, height: height), alpha: alpha)
+    }
+
     /// CGImage from packed RGB (for on-screen previews).
     static func cgImage(rgb: [UInt8], width: Int, height: Int) -> CGImage? {
         guard let provider = CGDataProvider(data: Data(rgb) as CFData) else { return nil }
@@ -67,5 +90,11 @@ enum PixelSampler {
             space: sRGB, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
             provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
         )
+    }
+}
+
+extension UIColor {
+    convenience init(_ color: RGB8) {
+        self.init(red: CGFloat(color.r) / 255, green: CGFloat(color.g) / 255, blue: CGFloat(color.b) / 255, alpha: 1)
     }
 }

@@ -47,6 +47,8 @@ targets:
         NSPhotoLibraryUsageDescription: >-
           Year Barcode reads your photos on this iPhone to calculate their average colors.
           Your photo library is not uploaded.
+        NSPhotoLibraryAddUsageDescription: >-
+          Year Barcode saves your finished poster PNG to your photo library when you tap Save to Photos.
         # Continued-processing tasks are submitted with a unique suffix per run.
         BGTaskSchedulerPermittedIdentifiers:
           - $(PRODUCT_BUNDLE_IDENTIFIER).generation.*

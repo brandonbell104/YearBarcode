@@ -39,8 +39,7 @@ public enum Grouper {
     public static func barcode(
         photos: [IncludedPhoto],
         mode: BarcodeMode,
-        capacity: Int,
-        daySlots: [DayKey]
+        capacity: Int
     ) -> BarcodeData {
         let sorted = photos.sorted {
             $0.captureDate != $1.captureDate ? $0.captureDate < $1.captureDate : $0.assetID < $1.assetID
@@ -50,7 +49,7 @@ public enum Grouper {
             let stripes = everyPhoto(sorted, capacity: capacity)
             return BarcodeData(stripes: stripes, includedPhotoCount: sorted.count, groupedToFit: sorted.count > capacity)
         case .everyDay:
-            return BarcodeData(stripes: everyDay(sorted, slots: daySlots), includedPhotoCount: sorted.count, groupedToFit: false)
+            return BarcodeData(stripes: everyDay(sorted), includedPhotoCount: sorted.count, groupedToFit: false)
         }
     }
 
@@ -81,11 +80,12 @@ public enum Grouper {
         return stripes
     }
 
-    /// One equal slot per calendar day; empty days are white, never borrowed.
-    public static func everyDay(_ photos: [IncludedPhoto], slots: [DayKey]) -> [Stripe] {
+    /// One equal stripe per day that has photos, in date order. Days without
+    /// photos are left out, so the barcode has no gaps and never invents a color.
+    public static func everyDay(_ photos: [IncludedPhoto]) -> [Stripe] {
         var sums: [DayKey: ColorSum] = [:]
         for photo in photos { sums[photo.day, default: ColorSum()].add(photo.color) }
-        return slots.map { Stripe(sum: sums[$0]) }
+        return sums.keys.sorted().map { Stripe(sum: sums[$0]) }
     }
 
     /// Capped proportional allocation of `capacity` groups across days.

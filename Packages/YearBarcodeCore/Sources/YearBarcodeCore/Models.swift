@@ -24,7 +24,7 @@ public enum BarcodeMode: String, Codable, CaseIterable, Sendable {
         case .everyPhoto:
             return "One stripe per photo, oldest first. Large years may group neighboring photos from the same day to fit the poster."
         case .everyDay:
-            return "One equal stripe per calendar day. Days without included photos stay white."
+            return "One equal stripe for each day that has photos, in date order. Days without photos are skipped, so there are no gaps."
         }
     }
 }
@@ -82,11 +82,32 @@ public struct ArtworkSettings: Codable, Hashable, Sendable {
     public var mode: BarcodeMode
     public var printSize: PrintSize
     public var orientation: Orientation
+    /// Poster background (the border around the barcode).
+    public var background: RGB8
 
-    public init(mode: BarcodeMode = .everyPhoto, printSize: PrintSize = .size24x36, orientation: Orientation = .landscape) {
+    public init(
+        mode: BarcodeMode = .everyPhoto,
+        printSize: PrintSize = .size24x36,
+        orientation: Orientation = .landscape,
+        background: RGB8 = .white
+    ) {
         self.mode = mode
         self.printSize = printSize
         self.orientation = orientation
+        self.background = background
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, printSize, orientation, background
+    }
+
+    /// Settings saved before `background` existed decode with a white background.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try c.decode(BarcodeMode.self, forKey: .mode)
+        printSize = try c.decode(PrintSize.self, forKey: .printSize)
+        orientation = try c.decode(Orientation.self, forKey: .orientation)
+        background = try c.decodeIfPresent(RGB8.self, forKey: .background) ?? .white
     }
 
     public static let `default` = ArtworkSettings()

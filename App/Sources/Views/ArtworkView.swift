@@ -41,29 +41,35 @@ struct ArtworkView: View {
                        let summary = ArtworkText.groupingSummary(barcode, mode: session.artwork.settings.mode) {
                         Text(summary).font(.subheadline).foregroundStyle(.secondary)
                     }
-                    DisclosureGroup("Details", isExpanded: $showDetails) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let barcode = session.barcode {
-                                Text(ArtworkText.details(barcode, counts: counts))
-                            }
-                            ForEach(ExclusionReason.allCases, id: \.self) { reason in
-                                if let n = counts.excluded[reason], n > 0 {
-                                    Text("\(reason.label): \(ArtworkText.formatted(n))")
-                                }
-                            }
-                            if counts.unavailable > 0 { Text("Unavailable (deleted or no access): \(ArtworkText.formatted(counts.unavailable))") }
-                            if counts.changed > 0 { Text("Edited after Generate: \(ArtworkText.formatted(counts.changed))") }
-                            if counts.missingDate + counts.invalidDate > 0 {
-                                Text("Skipped, no valid capture date: \(ArtworkText.formatted(counts.missingDate + counts.invalidDate))")
-                            }
-                            Text("Excluded photos are left out of this artwork only. Nothing in your library is changed.")
-                                .foregroundStyle(.tertiary)
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-                    .font(.subheadline)
                 }
+
+                // Its own row: a disclosure nested inside another row's stack
+                // can't grow the row, which cut the text off with "…".
+                DisclosureGroup("Details", isExpanded: $showDetails) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let barcode = session.barcode {
+                            Text(ArtworkText.details(barcode, counts: counts))
+                        }
+                        ForEach(ExclusionReason.allCases, id: \.self) { reason in
+                            if let n = counts.excluded[reason], n > 0 {
+                                Text("\(reason.label): \(ArtworkText.formatted(n))")
+                            }
+                        }
+                        if counts.unavailable > 0 { Text("Unavailable (deleted or no access): \(ArtworkText.formatted(counts.unavailable))") }
+                        if counts.changed > 0 { Text("Edited after Generate: \(ArtworkText.formatted(counts.changed))") }
+                        if counts.missingDate + counts.invalidDate > 0 {
+                            Text("Skipped, no valid capture date: \(ArtworkText.formatted(counts.missingDate + counts.invalidDate))")
+                        }
+                        Text("Excluded photos are left out of this artwork only. Nothing in your library is changed.")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                }
+                .font(.subheadline)
             }
 
             if !counts.isComplete || report.snapshot.access == .limited {
@@ -92,6 +98,17 @@ struct ArtworkView: View {
             Section("Layout") {
                 SettingsEditor(settings: session.artwork.settings) { settings in
                     Task { await session.update(settings) }
+                }
+                if session.artwork.settings.mode == .everyPhoto {
+                    Text(ArtworkText.capacityHint(
+                        year: report.snapshot.year,
+                        photoCount: counts.included,
+                        capacity: PosterLayout(printSize: session.artwork.settings.printSize, orientation: session.artwork.settings.orientation).maxGroups,
+                        size: session.artwork.settings.printSize,
+                        exact: true
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
             }
 

@@ -135,7 +135,7 @@ final class SnapshotAndFilterTests: XCTestCase {
         XCTAssertFalse(report.counts.isComplete, "A failed download must not look complete")
 
         let data = report.barcode(for: ArtworkSettings(mode: .everyDay, printSize: .size12x18, orientation: .portrait))
-        XCTAssertEqual(data.stripes.count, 365)
+        XCTAssertEqual(data.stripes.count, 2, "Two days have included photos")
         XCTAssertEqual(data.includedPhotoCount, 2)
         XCTAssertEqual(ArtworkText.title(year: 2025, included: 7842, locale: Locale(identifier: "en_US")), "2025 - 7,842 photos")
     }
@@ -157,6 +157,34 @@ final class SnapshotAndFilterTests: XCTestCase {
         XCTAssertEqual(JobTransitions.recoveredOnLaunch(.paused).0, .paused)
         XCTAssertTrue(JobTransitions.canResume(.interrupted))
         XCTAssertFalse(JobTransitions.canResume(.finished))
+    }
+}
+
+extension SnapshotAndFilterTests {
+    func testYearCountsSkipFutureAndUndatedPhotos() {
+        let counts = SnapshotBuilder.yearCounts(
+            captureDates: [date(2024, 5, 1), nil, date(2026, 1, 2), date(2026, 3, 1), date(2030, 1, 1), date(2024, 6, 1)],
+            now: date(2026, 10, 9), timeZone: tz
+        )
+        XCTAssertEqual(counts, [2024: 2, 2026: 2])
+    }
+
+    func testSettingsWithoutBackgroundDecodeAsWhite() throws {
+        let legacy = Data(#"{"mode":"everyDay","printSize":"size18x24","orientation":"portrait"}"#.utf8)
+        let settings = try JSONDecoder().decode(ArtworkSettings.self, from: legacy)
+        XCTAssertEqual(settings.background, .white)
+        XCTAssertEqual(settings.mode, .everyDay)
+
+        var dark = settings
+        dark.background = RGB8(r: 20, g: 24, b: 30)
+        let roundTrip = try JSONDecoder().decode(ArtworkSettings.self, from: JSONEncoder().encode(dark))
+        XCTAssertEqual(roundTrip, dark)
+        XCTAssertTrue(dark.background.prefersLightText)
+        XCTAssertFalse(RGB8.white.prefersLightText)
+
+        // Border photos saved before free placement existed still decode.
+        let photo = try JSONDecoder().decode(BorderPhoto.self, from: Data(#"{"assetID":"a","zoom":1,"centerX":0.5,"centerY":0.5}"#.utf8))
+        XCTAssertNil(photo.placement)
     }
 }
 

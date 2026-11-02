@@ -64,10 +64,10 @@ CI (`.github/workflows/ci.yml`) runs the core tests on Linux and macOS and build
 | Capture date only; missing/invalid dates skipped and counted; no future years | `SnapshotBuilder`, `availableYears` |
 | Deleted/edited before analysis → unavailable/changed, reported | `GenerationEngine.analyze`, `GenerationCounts` |
 | Every Photo: one stripe per photo, or exactly K groups, never across days, capped proportional allocation, largest remainders with chronological ties | `Grouper.everyPhoto`, `Grouper.allocate`, `Grouper.partition` |
-| Every Day: 365/366 slots or Jan 1 to cutoff; empty days white | `YearCalendar.daySlots`, `Grouper.everyDay` |
+| Every Day: one equal stripe per day that has photos (changed from the spec: empty days are skipped, not drawn white) | `Grouper.everyDay` |
 | Linear-light averaging with sums and counts | `ColorSum`, `ColorAverager` |
 | Barcode 90% × 75%, K = floor(length / 2), stripes ≥ 2 px | `PosterLayout`, `StripeGeometry.boundaries` |
-| Year top, count bottom, watermark below barcode, 0–4 photo slots, no overlap in either orientation | `PosterLayout.photoSlots`, `RenderTests` |
+| Year top, count bottom, watermark below barcode, 0–4 border photos that can be moved, resized and rotated but never cover the barcode or text | `PosterLayout.photoSlots`, `BorderPlacement`, `PosterLayout.isValid`, `RenderTests` |
 | Change mode/size/orientation from cached analysis | `GenerationReport.barcode(for:)`, `ArtworkSession.update` |
 | Preview first; full PNG only on Save/Share; sRGB + 300 PPI; no source metadata; bounded memory | `ArtworkRenderer`, `ScanlineRenderer`, `StreamingPNGWriter` |
 | Filters: screenshots, bursts, documents, memes, downloaded, duplicates; still images only | `PhotoAnalyzer`, `FilterPolicy`, `DuplicateResolver`, `PhotoLibraryService.stillImageOptions` |

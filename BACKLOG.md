@@ -4,12 +4,12 @@ Status: `[ ]` to do · `[~]` in progress · `[x]` done
 
 ## App changes
 
-### 1. [ ] Show photo counts when picking a year
+### 1. [x] Show photo counts when picking a year
 - Years screen: each year in the picker shows how many photos it has, e.g. `2025 · 7,842 photos`.
 - Count still images by capture year in the same pass that already lists years (`PhotoLibraryService.availableYears`), so it costs no extra library scan.
 - This is the count *before* filtering (screenshots, documents, duplicates, and so on), so label it as "photos in library". The final "included" count after Generate can be lower. Add one line of help text saying so.
 
-### 2. [ ] Every Photo: say when grouping starts
+### 2. [x] Every Photo: say when grouping starts
 - Under the mode picker, show the selected size's limit and what will happen to the selected year:
   - "This 24 × 36 poster fits 4,860 photos as separate stripes. 2025 has 7,842, so some neighboring photos from the same day will be combined."
   - or "2025 has 3,100 photos, so every photo gets its own stripe."
@@ -17,31 +17,30 @@ Status: `[ ]` to do · `[~]` in progress · `[x]` done
 - Use the same wording on the Artwork screen's Layout section, where the included count is already known exactly.
 - Every Day help text stays as it is (one stripe per day; empty days white).
 
-### 4. [ ] Save PNG to the Photos library
+### 4. [x] Save PNG to the Photos library
 - Add **Save to Photos** next to Save to Files and Share. It saves the PNG file itself (lossless, 300 PPI), not a re-encoded copy.
 - Needs "add only" photo permission (`NSPhotoLibraryAddUsageDescription`); ask the first time the user saves.
 - Report success or failure inline (e.g. "Saved to Photos").
 
-### 5. [ ] Move, resize and rotate border photos
+### 5. [x] Move, resize and rotate border photos
 - Replace the fixed slots with free placement: drag to move, pinch to resize, two-finger twist to rotate, directly on the poster preview. Keep the existing pan/zoom crop inside each photo.
 - Rules: photos stay on the poster and never cover the barcode, year, count or watermark. A placement that would overlap snaps back.
 - Store position, size and rotation as fractions of the poster so they look the same on every print size, and use them in the full-resolution export.
 - Optional: snap to center lines and to equal spacing; a "Reset layout" button.
 - Changes the spec's "tidy row / side borders" rule into a default starting layout.
 
-### 6. [ ] Border background color
+### 6. [x] Border background color
 - Color choice for the poster background (currently white): a few presets (white, off-white, black, a few neutrals) plus a full color picker.
 - Year, count and watermark text switch between dark and light automatically so they stay readable.
 - Applies to the preview and the export. Saved per artwork.
-- Question: Every Day empty days are drawn white. After item 7 they disappear, so this mainly matters if gaps come back as an option.
 
-### 7. [ ] Every Day: no white gaps
+### 7. [x] Every Day: no white gaps
 - Today every calendar day gets a slot and days without photos are white (spec rule).
 - Change: drop days without photos, so the barcode is only days that have photos, edge to edge with equal-width stripes. Stripes stay in date order.
 - Update the mode help text and the Artwork summary (e.g. "312 days with photos").
-- Assumption to confirm: "truncate" means remove *every* empty day, not just the empty stretch at the start or end of the year. Could keep "Show empty days" as an option.
+- Done as: every empty day is removed. A "Show empty days" option could come back later if wanted.
 
-### 8. [ ] Bug: Artwork "Details" dropdown cuts off with "…"
+### 8. [x] Bug: Artwork "Details" dropdown cuts off with "…"
 - Cause: the `DisclosureGroup` sits inside the same list row as the title (`App/Sources/Views/ArtworkView.swift`). List rows don't resize for a nested disclosure, so the expanded text is truncated and the row looks grayed out.
 - Fix: put Details in its own row (or its own Section), let the text wrap (`fixedSize(horizontal: false, vertical: true)`), and stop the row from highlighting on tap.
 

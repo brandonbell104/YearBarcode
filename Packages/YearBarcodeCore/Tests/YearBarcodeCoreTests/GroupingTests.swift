@@ -146,7 +146,7 @@ final class GroupingTests: XCTestCase {
         }
     }
 
-    func testEveryDaySlotsLeapYearsPartialYearsAndWhiteGaps() {
+    func testDaySlotsLeapYearsAndPartialYears() {
         let calendar = YearCalendar(timeZone: utc)
         XCTAssertEqual(calendar.daySlots(year: 2024, cutoff: calendar.startOfYear(2026)).count, 366)
         XCTAssertEqual(calendar.daySlots(year: 2025, cutoff: calendar.startOfYear(2026)).count, 365)
@@ -154,15 +154,37 @@ final class GroupingTests: XCTestCase {
         let cutoff = calendar.startOfYear(2026).addingTimeInterval(40 * 86_400 + 3600)
         XCTAssertEqual(calendar.daySlots(year: 2026, cutoff: cutoff).count, 41)
 
-        let input = photos(perDay: [2, 0, 3])
-        let slots = calendar.daySlots(year: 2025, cutoff: calendar.startOfYear(2026))
-        let stripes = Grouper.everyDay(input, slots: slots)
-        XCTAssertEqual(stripes.count, 365)
-        XCTAssertEqual(stripes[0].sum?.count, 2)
-        XCTAssertNil(stripes[1].sum)
-        XCTAssertEqual(stripes[1].rgb8, .white)
-        XCTAssertEqual(stripes[2].sum?.count, 3)
-        XCTAssertTrue(stripes[3...].allSatisfy { $0.sum == nil })
+    }
+
+    func testEveryDaySkipsDaysWithoutPhotos() {
+        // Days 1, 3 and 6 have photos; the rest of the year has none.
+        let input = photos(perDay: [2, 0, 3, 0, 0, 1])
+        let stripes = Grouper.everyDay(input.shuffled())
+        XCTAssertEqual(stripes.map { $0.sum?.count }, [2, 3, 1], "Only days with photos, in date order")
+        XCTAssertTrue(stripes.allSatisfy { $0.sum != nil }, "No white gaps")
+
+        var firstDay = ColorSum()
+        input.prefix(2).forEach { firstDay.add($0.color) }
+        XCTAssertEqual(stripes[0].sum!.count, firstDay.count)
+        XCTAssertEqual(stripes[0].sum!.average!.r, firstDay.average!.r, accuracy: 1e-12)
+
+        let data = Grouper.barcode(photos: input, mode: .everyDay, capacity: 2430)
+        XCTAssertEqual(data.stripes.count, 3)
+        XCTAssertEqual(data.includedPhotoCount, 6)
+        XCTAssertEqual(ArtworkText.groupingSummary(data, mode: .everyDay), "3 days with photos, one stripe each.")
+        XCTAssertTrue(Grouper.everyDay([]).isEmpty)
+    }
+
+    func testCapacityHint() {
+        let us = Locale(identifier: "en_US")
+        XCTAssertEqual(
+            ArtworkText.capacityHint(year: 2025, photoCount: 7842, capacity: 4860, size: .size24x36, exact: false, locale: us),
+            "This 24 × 36 poster fits 4,860 photos as separate stripes. 2025 has 7,842 photos, so some neighboring photos from the same day will be combined."
+        )
+        XCTAssertEqual(
+            ArtworkText.capacityHint(year: 2025, photoCount: 2430, capacity: 2430, size: .size12x18, exact: true, locale: us),
+            "This 12 × 18 poster fits 2,430 photos as separate stripes. 2,430 photos are included, so every photo gets its own stripe."
+        )
     }
 
     func testChangingSizeRecomputesFromOriginalPhotos() {

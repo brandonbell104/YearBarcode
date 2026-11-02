@@ -8,6 +8,7 @@ struct CustomizeView: View {
     @State private var session: ArtworkSession?
     @State private var showPicker = false
     @State private var cropping: BorderPhoto?
+    @State private var arranging = false
 
     var body: some View {
         Group {
@@ -39,6 +40,18 @@ struct CustomizeView: View {
             }
 
             Section {
+                BackgroundPicker(color: session.artwork.settings.background) { color in
+                    var settings = session.artwork.settings
+                    settings.background = color
+                    Task { await session.update(settings) }
+                }
+            } header: {
+                Text("Background")
+            } footer: {
+                Text("The border color around the barcode. Text switches between dark and light to stay readable.")
+            }
+
+            Section {
                 ForEach(session.artwork.borderPhotos) { photo in
                     HStack(spacing: 12) {
                         AssetThumbnail(assetID: photo.assetID, side: 56)
@@ -65,6 +78,23 @@ struct CustomizeView: View {
                         Label("Add Border Photo", systemImage: "plus")
                     }
                 }
+                if !session.artwork.borderPhotos.isEmpty {
+                    Button {
+                        arranging = true
+                    } label: {
+                        Label("Move, Resize & Rotate", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
+                    }
+                    if session.artwork.borderPhotos.contains(where: { $0.placement != nil }) {
+                        Button("Reset Layout", role: .destructive) {
+                            let photos = session.artwork.borderPhotos.map { photo -> BorderPhoto in
+                                var photo = photo
+                                photo.placement = nil
+                                return photo
+                            }
+                            Task { await session.setBorderPhotos(photos) }
+                        }
+                    }
+                }
             } header: {
                 HStack {
                     Text("Border photos (optional, up to 4)")
@@ -72,7 +102,7 @@ struct CustomizeView: View {
                     if !session.artwork.borderPhotos.isEmpty { EditButton().font(.caption) }
                 }
             } footer: {
-                Text("Border photos are decorative. They don't change the barcode or the photo count.")
+                Text("Border photos are decorative. They don't change the barcode or the photo count, and they can't cover the barcode or the text.")
             }
 
             Section {
@@ -118,7 +148,7 @@ struct CustomizeView: View {
             ) { assetID in
                 var photos = session.artwork.borderPhotos
                 if let missing = session.replacementNeeded, let index = photos.firstIndex(where: { $0.assetID == missing }) {
-                    photos[index] = BorderPhoto(assetID: assetID)
+                    photos[index] = BorderPhoto(assetID: assetID, placement: photos[index].placement)
                     session.replacementNeeded = nil
                 } else {
                     photos.append(BorderPhoto(assetID: assetID))
@@ -130,12 +160,15 @@ struct CustomizeView: View {
             CropEditor(
                 photo: photo,
                 image: session.borderImages[photo.assetID],
-                slotAspect: slotAspect(session)
+                slotAspect: layout(session).photoAspect
             ) { updated in
                 var photos = session.artwork.borderPhotos
                 if let index = photos.firstIndex(where: { $0.assetID == updated.assetID }) { photos[index] = updated }
                 Task { await session.setBorderPhotos(photos) }
             }
+        }
+        .fullScreenCover(isPresented: $arranging) {
+            ArrangePhotosView(session: session)
         }
         .sheet(isPresented: Binding(
             get: { if case .ready = session.exportState { return true } else { return false } },
@@ -143,8 +176,8 @@ struct CustomizeView: View {
         )) {
             if case .ready(let url, let purpose) = session.exportState {
                 switch purpose {
-                case .save: DocumentExporter(url: url)
-                case .share: ActivitySheet(items: [url])
+                case .files: DocumentExporter(url: url)
+                case .share, .photos: ActivitySheet(items: [url])
                 }
             }
         }
@@ -160,25 +193,100 @@ struct CustomizeView: View {
             }
         default:
             Button {
-                Task { await session.export(.save) }
+                Task { await session.export(.photos) }
             } label: {
-                Label("Save PNG", systemImage: "square.and.arrow.down")
+                Label("Save to Photos", systemImage: "photo.badge.plus")
+            }
+            Button {
+                Task { await session.export(.files) }
+            } label: {
+                Label("Save to Files", systemImage: "folder")
             }
             Button {
                 Task { await session.export(.share) }
             } label: {
                 Label("Share PNG", systemImage: "square.and.arrow.up")
             }
-            if case .failed(let message) = session.exportState {
+            switch session.exportState {
+            case .savedToPhotos:
+                Label("Saved to Photos", systemImage: "checkmark.circle.fill")
+                    .font(.footnote).foregroundStyle(.green)
+            case .failed(let message):
                 Text(message).font(.footnote).foregroundStyle(.red)
+            default:
+                EmptyView()
             }
         }
     }
 
-    private func slotAspect(_ session: ArtworkSession) -> Double {
-        let layout = PosterLayout(printSize: session.artwork.settings.printSize, orientation: session.artwork.settings.orientation)
-        let slot = layout.photoSlots(count: 1)[0]
-        return Double(slot.width) / Double(slot.height)
+    private func layout(_ session: ArtworkSession) -> PosterLayout {
+        PosterLayout(printSize: session.artwork.settings.printSize, orientation: session.artwork.settings.orientation)
+    }
+}
+
+// MARK: - Background color
+
+struct BackgroundPicker: View {
+    let color: RGB8
+    let onChange: (RGB8) -> Void
+
+    static let presets: [(name: String, color: RGB8)] = [
+        ("White", .white),
+        ("Paper", RGB8(r: 246, g: 241, b: 232)),
+        ("Stone", RGB8(r: 214, g: 210, b: 202)),
+        ("Sage", RGB8(r: 205, g: 214, b: 196)),
+        ("Blush", RGB8(r: 240, g: 216, b: 210)),
+        ("Navy", RGB8(r: 24, g: 36, b: 64)),
+        ("Charcoal", RGB8(r: 40, g: 40, b: 42)),
+        ("Black", .black),
+    ]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(Self.presets, id: \.name) { preset in
+                    Button {
+                        onChange(preset.color)
+                    } label: {
+                        Circle()
+                            .fill(Color(preset.color))
+                            .frame(width: 34, height: 34)
+                            .overlay(Circle().strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1))
+                            .overlay {
+                                if preset.color == color {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(preset.color.prefersLightText ? .white : .black)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(preset.name)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        ColorPicker("Custom color", selection: Binding(
+            get: { Color(color) },
+            set: { onChange(RGB8($0)) }
+        ), supportsOpacity: false)
+    }
+}
+
+extension Color {
+    init(_ color: RGB8) {
+        self.init(.sRGB, red: Double(color.r) / 255, green: Double(color.g) / 255, blue: Double(color.b) / 255)
+    }
+}
+
+extension RGB8 {
+    /// Converts a picked color to 8-bit sRGB (colors outside sRGB are clamped).
+    init(_ color: Color) {
+        let resolved = color.resolve(in: EnvironmentValues())
+        func byte(_ linear: Float) -> UInt8 {
+            UInt8((SRGB.toEncoded(Double(linear)) * 255).rounded())
+        }
+        self.init(r: byte(resolved.linearRed), g: byte(resolved.linearGreen), b: byte(resolved.linearBlue))
     }
 }
 

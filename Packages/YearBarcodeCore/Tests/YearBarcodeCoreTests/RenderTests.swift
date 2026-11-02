@@ -112,6 +112,70 @@ final class RenderTests: XCTestCase {
         XCTAssertEqual(decoded, renderer.renderImage())
     }
 
+    func testDefaultPhotoPlacementsAreValidEverywhere() {
+        for size in PrintSize.allCases {
+            for orientation in Orientation.allCases {
+                let layout = PosterLayout(printSize: size, orientation: orientation)
+                for count in 1...PosterLayout.maxBorderPhotos {
+                    for index in 0..<count {
+                        let placement = layout.defaultPlacement(index: index, count: count)
+                        XCTAssertTrue(layout.isValid(placement), "\(size) \(orientation) \(index)/\(count)")
+                    }
+                }
+            }
+        }
+    }
+
+    func testPlacementRulesKeepPhotosOffTheBarcodeAndLabels() {
+        let layout = PosterLayout(printSize: .size24x36, orientation: .landscape)
+        // Centered on the barcode.
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.1)))
+        // Hanging off the left edge.
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.0, centerY: 0.92, width: 0.05)))
+        // Too big.
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.9, width: 0.9)))
+
+        // Lower-left corner of the border: fits flat, and still fits slightly rotated.
+        var corner = BorderPlacement(centerX: 0.12, centerY: 0.931, width: 0.06)
+        XCTAssertTrue(layout.isValid(corner))
+        corner.rotation = 0.2
+        XCTAssertTrue(layout.isValid(corner))
+        // Rotated 45° and enlarged, its corner reaches up into the barcode.
+        corner.width = 0.16
+        corner.rotation = .pi / 4
+        XCTAssertFalse(layout.isValid(corner))
+
+        // A saved placement that doesn't fit a different poster falls back to the default slot.
+        let photo = BorderPhoto(assetID: "a", placement: BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.1))
+        XCTAssertEqual(layout.resolvedPlacement(for: photo, index: 0, count: 1), layout.defaultPlacement(index: 0, count: 1))
+    }
+
+    func testOrientedRectGeometry() {
+        let square = OrientedRect(centerX: 50, centerY: 50, width: 20, height: 20, rotation: .pi / 4)
+        let box = square.boundingBox
+        XCTAssertEqual(Double(box.width), 20 * 2.0.squareRoot(), accuracy: 2)
+        XCTAssertTrue(square.intersects(PixelRect(x: 60, y: 45, width: 10, height: 10)))
+        // Inside the unrotated bounding box corner but outside the diamond.
+        XCTAssertFalse(square.intersects(PixelRect(x: 36, y: 36, width: 3, height: 3)))
+    }
+
+    func testBackgroundColorAndAlphaOverlays() {
+        let layout = PosterLayout(canvas: PixelSize(width: 300, height: 200), orientation: .landscape)
+        let navy = RGB8(r: 10, g: 20, b: 60)
+        // 2x1 overlay: left pixel opaque red, right pixel transparent.
+        let rect = PixelRect(x: 2, y: 2, width: 2, height: 1)
+        let overlay = RasterOverlay(rect: rect, pixels: [255, 0, 0, 0, 0, 0], alpha: [255, 0])
+        let image = ScanlineRenderer(layout: layout, stripeColors: [.white], overlays: [overlay], background: navy).renderImage()
+        func pixel(_ x: Int, _ y: Int) -> RGB8 {
+            let i = (y * 300 + x) * 3
+            return RGB8(r: image[i], g: image[i + 1], b: image[i + 2])
+        }
+        XCTAssertEqual(pixel(0, 0), navy, "Border uses the background color")
+        XCTAssertEqual(pixel(2, 2), RGB8(r: 255, g: 0, b: 0))
+        XCTAssertEqual(pixel(3, 2), navy, "Transparent overlay pixels show the background")
+        XCTAssertEqual(pixel(layout.barcode.x + 5, layout.barcode.y + 5), .white, "Stripes keep their own color")
+    }
+
     private func be32(_ b: [UInt8], _ i: Int) -> UInt32 {
         UInt32(b[i]) << 24 | UInt32(b[i + 1]) << 16 | UInt32(b[i + 2]) << 8 | UInt32(b[i + 3])
     }

@@ -36,6 +36,15 @@ public struct RGB8: Codable, Hashable, Sendable {
     }
 
     public static let white = RGB8(r: 255, g: 255, b: 255)
+    public static let black = RGB8(r: 0, g: 0, b: 0)
+
+    /// Relative luminance (WCAG), 0 = black, 1 = white.
+    public var luminance: Double {
+        0.2126 * SRGB.linear(fromByte: r) + 0.7152 * SRGB.linear(fromByte: g) + 0.0722 * SRGB.linear(fromByte: b)
+    }
+
+    /// True when light text reads better than dark text on this color.
+    public var prefersLightText: Bool { luminance < 0.18 }
 }
 
 /// sRGB transfer functions (IEC 61966-2-1).
