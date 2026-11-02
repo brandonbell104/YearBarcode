@@ -37,6 +37,9 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Year Barcode
+        # Read from build settings so the TestFlight workflow can raise the build number each run.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
