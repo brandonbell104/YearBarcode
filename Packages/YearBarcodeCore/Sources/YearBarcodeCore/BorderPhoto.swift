@@ -1,7 +1,7 @@
 import Foundation
 
 /// An optional decorative photo in the poster border. It never affects the
-/// barcode or the included photo count.
+/// barcode's colors or the included photo count, even when drawn on top of it.
 public struct BorderPhoto: Codable, Hashable, Identifiable, Sendable {
     public var assetID: String
     /// 1 = the largest crop of the slot's aspect ratio that fits the photo; up to 4.
@@ -125,9 +125,6 @@ extension PosterLayout {
     /// Width / height of border photos.
     public var photoAspect: Double { orientation == .landscape ? 4.0 / 3.0 : 4.0 / 5.0 }
 
-    /// Areas photos may never cover.
-    public var reservedRects: [PixelRect] { [barcode, yearLabel, countLabel, watermark] }
-
     /// The tidy default layout (row in landscape, side borders in portrait).
     public func defaultPlacement(index: Int, count: Int) -> BorderPlacement {
         let slots = photoSlots(count: count)
@@ -150,13 +147,12 @@ extension PosterLayout {
         )
     }
 
-    /// On the poster, a sensible size, and clear of the barcode and every label.
+    /// Photos may go anywhere, over the barcode and labels and partly past the
+    /// poster edge (that part is cropped). They only need a sensible size and
+    /// their center on the poster, so at least a quarter of the photo shows.
     public func isValid(_ placement: BorderPlacement) -> Bool {
         guard placement.width >= BorderPlacement.minWidth, placement.width <= BorderPlacement.maxWidth else { return false }
-        let box = frame(for: placement)
-        let w = Double(canvas.width), h = Double(canvas.height)
-        guard box.corners.allSatisfy({ $0.x >= 0 && $0.y >= 0 && $0.x <= w && $0.y <= h }) else { return false }
-        return !reservedRects.contains { box.intersects($0) }
+        return (0...1).contains(placement.centerX) && (0...1).contains(placement.centerY)
     }
 
     /// The placement to draw: the photo's own if still valid for this

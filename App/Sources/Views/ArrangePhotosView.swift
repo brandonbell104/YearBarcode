@@ -2,8 +2,8 @@ import SwiftUI
 import YearBarcodeCore
 
 /// Drag to move, pinch to resize and twist to rotate border photos directly on
-/// the poster. A photo dropped where it would cover the barcode, the text or
-/// the poster edge springs back to where it started.
+/// the poster. Photos can go anywhere, including over the barcode and partly
+/// off the edge (cropped). One dragged so its center leaves the poster springs back.
 struct ArrangePhotosView: View {
     @Environment(\.dismiss) private var dismiss
     let session: ArtworkSession
@@ -122,7 +122,7 @@ struct ArrangePhotosView: View {
     @ViewBuilder
     private var controls: some View {
         VStack(spacing: 10) {
-            Text("Drag to move, pinch to resize, twist to rotate. Photos can't cover the barcode or the text.")
+            Text("Drag to move, pinch to resize, twist to rotate. Photos can go over the barcode, and anything past the edge is cropped.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

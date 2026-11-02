@@ -126,28 +126,26 @@ final class RenderTests: XCTestCase {
         }
     }
 
-    func testPlacementRulesKeepPhotosOffTheBarcodeAndLabels() {
+    func testPhotosCanGoAnywhereOnThePoster() {
         let layout = PosterLayout(printSize: .size24x36, orientation: .landscape)
-        // Centered on the barcode.
-        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.1)))
-        // Hanging off the left edge.
-        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.0, centerY: 0.92, width: 0.05)))
-        // Too big.
-        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.9, width: 0.9)))
+        // Over the middle of the barcode, rotated.
+        XCTAssertTrue(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.3, rotation: 0.4)))
+        // Hanging off the left edge (center still on the poster): allowed, the rest is cropped.
+        XCTAssertTrue(layout.isValid(BorderPlacement(centerX: 0.01, centerY: 0.92, width: 0.2)))
+        // Center off the poster: most of the photo would be gone.
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: -0.05, centerY: 0.5, width: 0.1)))
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 1.1, width: 0.1)))
+        // Size limits.
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.9)))
+        XCTAssertFalse(layout.isValid(BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.01)))
 
-        // Lower-left corner of the border: fits flat, and still fits slightly rotated.
-        var corner = BorderPlacement(centerX: 0.12, centerY: 0.931, width: 0.06)
-        XCTAssertTrue(layout.isValid(corner))
-        corner.rotation = 0.2
-        XCTAssertTrue(layout.isValid(corner))
-        // Rotated 45° and enlarged, its corner reaches up into the barcode.
-        corner.width = 0.16
-        corner.rotation = .pi / 4
-        XCTAssertFalse(layout.isValid(corner))
-
-        // A saved placement that doesn't fit a different poster falls back to the default slot.
+        // Saved placements carry over to other sizes as-is.
         let photo = BorderPhoto(assetID: "a", placement: BorderPlacement(centerX: 0.5, centerY: 0.5, width: 0.1))
-        XCTAssertEqual(layout.resolvedPlacement(for: photo, index: 0, count: 1), layout.defaultPlacement(index: 0, count: 1))
+        XCTAssertEqual(layout.resolvedPlacement(for: photo, index: 0, count: 1), photo.placement)
+        XCTAssertEqual(
+            layout.resolvedPlacement(for: BorderPhoto(assetID: "b"), index: 0, count: 1),
+            layout.defaultPlacement(index: 0, count: 1)
+        )
     }
 
     func testOrientedRectGeometry() {

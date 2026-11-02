@@ -37,6 +37,7 @@ enum ArtworkRenderer {
         let colors = StripeGeometry.previewColors(input.barcode.stripes, pixels: layout.barcodeLength)
         var overlays = labelOverlays(input, layout: layout)
         if includePhotos { overlays += photoOverlays(input.borderPhotos, layout: layout, images: borderImages) }
+        overlays += watermarkOverlays(input, layout: layout)
         let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: input.settings.background)
         return PixelSampler.cgImage(rgb: renderer.renderImage(), width: canvas.width, height: canvas.height)
     }
@@ -68,7 +69,10 @@ enum ArtworkRenderer {
         let url = directory.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: url)
 
-        let overlays = labelOverlays(input, layout: layout) + photoOverlays(input.borderPhotos, layout: layout, images: images)
+        // Order matters: photos cover the barcode and labels, the watermark stays on top.
+        let overlays = labelOverlays(input, layout: layout)
+            + photoOverlays(input.borderPhotos, layout: layout, images: images)
+            + watermarkOverlays(input, layout: layout)
         images.removeAll()
         let colors = input.barcode.stripes.map(\.rgb8)
         let background = input.settings.background
@@ -81,21 +85,24 @@ enum ArtworkRenderer {
 
     // MARK: Overlays
 
-    /// Year, count and watermark, in dark or light text depending on the background.
+    /// Year and count, in dark or light text depending on the background.
     static func labelOverlays(_ input: ArtworkInput, layout: PosterLayout) -> [RasterOverlay] {
         let background = input.settings.background
         let light = background.prefersLightText
         let primary = light ? UIColor(white: 0.95, alpha: 1) : UIColor(white: 0.12, alpha: 1)
         let secondary = light ? UIColor(white: 0.8, alpha: 1) : UIColor(white: 0.3, alpha: 1)
-        let tertiary = light ? UIColor(white: 0.65, alpha: 1) : UIColor(white: 0.55, alpha: 1)
-        var overlays = [
+        return [
             text(String(input.year), in: layout.yearLabel, weight: .semibold, color: primary, background: background),
             text(ArtworkText.photoCount(input.barcode.includedPhotoCount), in: layout.countLabel, weight: .regular, color: secondary, background: background),
         ]
-        if input.showWatermark {
-            overlays.append(text(PosterLayout.watermarkText, in: layout.watermark, weight: .regular, color: tertiary, background: background))
-        }
-        return overlays
+    }
+
+    /// Drawn last, above any border photo, so photos can't hide it.
+    static func watermarkOverlays(_ input: ArtworkInput, layout: PosterLayout) -> [RasterOverlay] {
+        guard input.showWatermark else { return [] }
+        let background = input.settings.background
+        let color = background.prefersLightText ? UIColor(white: 0.65, alpha: 1) : UIColor(white: 0.55, alpha: 1)
+        return [text(PosterLayout.watermarkText, in: layout.watermark, weight: .regular, color: color, background: background)]
     }
 
     static func text(_ string: String, in rect: PixelRect, weight: UIFont.Weight, color: UIColor, background: RGB8) -> RasterOverlay {
@@ -116,8 +123,8 @@ enum ArtworkRenderer {
     }
 
     /// Border photos at their (possibly rotated) placements. Each overlay is the
-    /// photo's bounding box with transparent corners, so photos can overlap
-    /// each other and blend onto the background.
+    /// photo's bounding box with transparent corners, so photos can overlap each
+    /// other, the barcode and the labels. Anything past the poster edge is cropped.
     static func photoOverlays(_ photos: [BorderPhoto], layout: PosterLayout, images: [String: UIImage]) -> [RasterOverlay] {
         let canvas = PixelRect(x: 0, y: 0, width: layout.canvas.width, height: layout.canvas.height)
         return photos.enumerated().compactMap { index, photo in

@@ -102,7 +102,7 @@ struct CustomizeView: View {
                     if !session.artwork.borderPhotos.isEmpty { EditButton().font(.caption) }
                 }
             } footer: {
-                Text("Border photos are decorative. They don't change the barcode or the photo count, and they can't cover the barcode or the text.")
+                Text("Photos are decorative and can go anywhere, even over the barcode. They don't change its colors or the photo count.")
             }
 
             Section {
