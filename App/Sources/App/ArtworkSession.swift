@@ -44,6 +44,7 @@ final class ArtworkSession {
     func load() async {
         isLoading = true
         report = await model.report(for: generationID)
+        fillMissingAspects()
         await loadBorderImages()
         await rebuild()
         isLoading = false
@@ -61,6 +62,30 @@ final class ArtworkSession {
         model.save(artwork)
         await loadBorderImages()
         await rebuild()
+    }
+
+    /// The photo's own width / height (PhotoKit reports display-oriented pixels).
+    func aspect(of assetID: String) -> Double? {
+        guard let asset = model.library.asset(id: assetID), asset.pixelWidth > 0, asset.pixelHeight > 0 else { return nil }
+        return Double(asset.pixelWidth) / Double(asset.pixelHeight)
+    }
+
+    /// Photos added before shapes were stored get their real shape, so they
+    /// stop being cropped to the slot.
+    private func fillMissingAspects() {
+        guard artwork.borderPhotos.contains(where: { $0.aspect == nil }) else { return }
+        artwork.borderPhotos = artwork.borderPhotos.map { photo in
+            var photo = photo
+            if photo.aspect == nil {
+                photo.aspect = aspect(of: photo.assetID)
+                // The old crop was for the slot shape; show the whole photo instead.
+                photo.zoom = 1
+                photo.centerX = 0.5
+                photo.centerY = 0.5
+            }
+            return photo
+        }
+        model.save(artwork)
     }
 
     /// Recomputes groups from the original per-photo colors, then the preview.

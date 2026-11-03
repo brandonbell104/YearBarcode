@@ -58,7 +58,7 @@ struct CustomizeView: View {
                         Text(photo.assetID == session.replacementNeeded ? "Unavailable - replace" : "Photo")
                             .foregroundStyle(photo.assetID == session.replacementNeeded ? Color.red : Color.primary)
                         Spacer()
-                        Button("Crop") { cropping = photo }.buttonStyle(.borderless)
+                        Button(photo.zoom > 1.001 ? "Cropped" : "Crop") { cropping = photo }.buttonStyle(.borderless)
                     }
                 }
                 .onMove { from, to in
@@ -148,10 +148,10 @@ struct CustomizeView: View {
             ) { assetID in
                 var photos = session.artwork.borderPhotos
                 if let missing = session.replacementNeeded, let index = photos.firstIndex(where: { $0.assetID == missing }) {
-                    photos[index] = BorderPhoto(assetID: assetID, placement: photos[index].placement)
+                    photos[index] = BorderPhoto(assetID: assetID, placement: photos[index].placement, aspect: session.aspect(of: assetID))
                     session.replacementNeeded = nil
                 } else {
-                    photos.append(BorderPhoto(assetID: assetID))
+                    photos.append(BorderPhoto(assetID: assetID, aspect: session.aspect(of: assetID)))
                 }
                 Task { await session.setBorderPhotos(photos) }
             }
@@ -160,7 +160,7 @@ struct CustomizeView: View {
             CropEditor(
                 photo: photo,
                 image: session.borderImages[photo.assetID],
-                slotAspect: layout(session).photoAspect
+                slotAspect: layout(session).aspect(for: photo)
             ) { updated in
                 var photos = session.artwork.borderPhotos
                 if let index = photos.firstIndex(where: { $0.assetID == updated.assetID }) { photos[index] = updated }

@@ -4,22 +4,33 @@ import Foundation
 /// barcode's colors or the included photo count, even when drawn on top of it.
 public struct BorderPhoto: Codable, Hashable, Identifiable, Sendable {
     public var assetID: String
-    /// 1 = the largest crop of the slot's aspect ratio that fits the photo; up to 4.
+    /// 1 = the whole photo (no cropping); higher values zoom in, up to 4.
     public var zoom: Double
     /// Crop center in normalized photo coordinates (0...1, origin top-left).
     public var centerX: Double
     public var centerY: Double
     /// Where the photo sits on the poster. Nil uses the default slot layout.
     public var placement: BorderPlacement?
+    /// The photo's own width / height, so it is shown uncropped in its original
+    /// shape. Nil for photos saved before this existed (they use the slot shape).
+    public var aspect: Double?
 
     public var id: String { assetID }
 
-    public init(assetID: String, zoom: Double = 1, centerX: Double = 0.5, centerY: Double = 0.5, placement: BorderPlacement? = nil) {
+    public init(
+        assetID: String,
+        zoom: Double = 1,
+        centerX: Double = 0.5,
+        centerY: Double = 0.5,
+        placement: BorderPlacement? = nil,
+        aspect: Double? = nil
+    ) {
         self.assetID = assetID
         self.zoom = zoom
         self.centerX = centerX
         self.centerY = centerY
         self.placement = placement
+        self.aspect = aspect
     }
 
     public static let maxZoom = 4.0
@@ -52,7 +63,8 @@ public struct BorderPhoto: Codable, Hashable, Identifiable, Sendable {
             zoom: min(max(zoom, 1), Self.maxZoom),
             centerX: (crop.x + crop.width / 2) / imageWidth,
             centerY: (crop.y + crop.height / 2) / imageHeight,
-            placement: placement
+            placement: placement,
+            aspect: aspect
         )
     }
 }
@@ -122,29 +134,43 @@ public struct OrientedRect: Hashable, Sendable {
 }
 
 extension PosterLayout {
-    /// Width / height of border photos.
+    /// Shape of the default slots (width / height), used when a photo's own shape is unknown.
     public var photoAspect: Double { orientation == .landscape ? 4.0 / 3.0 : 4.0 / 5.0 }
 
-    /// The tidy default layout (row in landscape, side borders in portrait).
-    public func defaultPlacement(index: Int, count: Int) -> BorderPlacement {
+    /// The photo's own shape, falling back to the slot shape.
+    public func aspect(for photo: BorderPhoto) -> Double {
+        if let aspect = photo.aspect, aspect.isFinite, aspect > 0 { return aspect }
+        return photoAspect
+    }
+
+    /// The tidy default layout (row in landscape, side borders in portrait). The
+    /// photo keeps its own shape and is sized to fit inside its slot.
+    public func defaultPlacement(index: Int, count: Int, aspect: Double? = nil) -> BorderPlacement {
         let slots = photoSlots(count: count)
         let slot = slots[min(index, slots.count - 1)]
+        let shape = aspect ?? photoAspect
+        let width = min(Double(slot.width), Double(slot.height) * shape)
         return BorderPlacement(
             centerX: (Double(slot.x) + Double(slot.width) / 2) / Double(canvas.width),
             centerY: (Double(slot.y) + Double(slot.height) / 2) / Double(canvas.height),
-            width: Double(slot.width) / Double(canvas.short)
+            width: width / Double(canvas.short)
         )
     }
 
-    public func frame(for placement: BorderPlacement) -> OrientedRect {
+    public func frame(for placement: BorderPlacement, aspect: Double? = nil) -> OrientedRect {
         let width = placement.width * Double(canvas.short)
         return OrientedRect(
             centerX: placement.centerX * Double(canvas.width),
             centerY: placement.centerY * Double(canvas.height),
             width: width,
-            height: width / photoAspect,
+            height: width / (aspect ?? photoAspect),
             rotation: placement.rotation
         )
+    }
+
+    /// Where and how big a photo is drawn, in poster pixels.
+    public func frame(for photo: BorderPhoto, index: Int, count: Int) -> OrientedRect {
+        frame(for: resolvedPlacement(for: photo, index: index, count: count), aspect: aspect(for: photo))
     }
 
     /// Photos may go anywhere, over the barcode and labels and partly past the
@@ -159,6 +185,6 @@ extension PosterLayout {
     /// poster (sizes and orientations differ), else its default slot.
     public func resolvedPlacement(for photo: BorderPhoto, index: Int, count: Int) -> BorderPlacement {
         if let placement = photo.placement, isValid(placement) { return placement }
-        return defaultPlacement(index: index, count: count)
+        return defaultPlacement(index: index, count: count, aspect: aspect(for: photo))
     }
 }

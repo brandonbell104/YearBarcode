@@ -148,6 +148,34 @@ final class RenderTests: XCTestCase {
         )
     }
 
+    func testPhotosKeepTheirOwnShapeUncropped() {
+        let layout = PosterLayout(printSize: .size24x36, orientation: .landscape)
+        let slot = layout.photoSlots(count: 1)[0]
+
+        // A tall 3:4 phone photo keeps its shape and fits inside the slot.
+        let tall = BorderPhoto(assetID: "tall", aspect: 3.0 / 4.0)
+        let tallFrame = layout.frame(for: tall, index: 0, count: 1)
+        XCTAssertEqual(tallFrame.width / tallFrame.height, 0.75, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(tallFrame.height, Double(slot.height) + 1e-6)
+        XCTAssertLessThanOrEqual(tallFrame.width, Double(slot.width) + 1e-6)
+
+        // A wide panorama keeps its shape too.
+        let wide = BorderPhoto(assetID: "wide", aspect: 3)
+        let wideFrame = layout.frame(for: wide, index: 0, count: 1)
+        XCTAssertEqual(wideFrame.width / wideFrame.height, 3, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(wideFrame.width, Double(slot.width) + 1e-6)
+
+        // At zoom 1 the crop is the whole photo: nothing is cut off.
+        let crop = tall.cropRect(imageWidth: 3000, imageHeight: 4000, slotAspect: layout.aspect(for: tall))
+        XCTAssertEqual(crop.x, 0, accuracy: 1e-9)
+        XCTAssertEqual(crop.y, 0, accuracy: 1e-9)
+        XCTAssertEqual(crop.width, 3000, accuracy: 1e-9)
+        XCTAssertEqual(crop.height, 4000, accuracy: 1e-9)
+
+        // Photos saved without a shape fall back to the slot shape.
+        XCTAssertEqual(layout.aspect(for: BorderPhoto(assetID: "old")), layout.photoAspect)
+    }
+
     func testOrientedRectGeometry() {
         let square = OrientedRect(centerX: 50, centerY: 50, width: 20, height: 20, rotation: .pi / 4)
         let box = square.boundingBox

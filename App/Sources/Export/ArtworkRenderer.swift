@@ -52,7 +52,7 @@ enum ArtworkRenderer {
         var images: [String: UIImage] = [:]
         for (index, photo) in input.borderPhotos.enumerated() {
             guard let asset = library.asset(id: photo.assetID) else { throw BorderPhotoError.unavailable(assetID: photo.assetID) }
-            let frame = layout.frame(for: layout.resolvedPlacement(for: photo, index: index, count: input.borderPhotos.count))
+            let frame = layout.frame(for: photo, index: index, count: input.borderPhotos.count)
             let zoom = min(max(photo.zoom, 1), BorderPhoto.maxZoom)
             let target = CGSize(width: frame.width * zoom * 1.25, height: frame.height * zoom * 1.25)
             do {
@@ -129,7 +129,7 @@ enum ArtworkRenderer {
         let canvas = PixelRect(x: 0, y: 0, width: layout.canvas.width, height: layout.canvas.height)
         return photos.enumerated().compactMap { index, photo in
             guard let image = images[photo.assetID] else { return nil }
-            let frame = layout.frame(for: layout.resolvedPlacement(for: photo, index: index, count: photos.count))
+            let frame = layout.frame(for: photo, index: index, count: photos.count)
             let box = clamp(frame.boundingBox, to: canvas)
             guard box.width > 0, box.height > 0 else { return nil }
             return PixelSampler.transparentOverlay(rect: box) { context, _ in

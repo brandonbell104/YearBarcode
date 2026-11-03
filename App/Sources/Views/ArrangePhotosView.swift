@@ -100,7 +100,7 @@ struct ArrangePhotosView: View {
     @ViewBuilder
     private func photoView(_ index: Int, posterSize: CGSize) -> some View {
         let placement = placements[index]
-        let frame = layout.frame(for: placement)
+        let frame = layout.frame(for: placement, aspect: layout.aspect(for: photos[index]))
         let k = posterSize.width / CGFloat(layout.canvas.width)
         let valid = layout.isValid(placement)
         let photo = photos[index]
@@ -265,7 +265,9 @@ struct ArrangePhotosView: View {
     // MARK: - Data
 
     private func defaults() -> [BorderPlacement] {
-        photos.indices.map { layout.defaultPlacement(index: $0, count: photos.count) }
+        photos.enumerated().map { index, photo in
+            layout.defaultPlacement(index: index, count: photos.count, aspect: layout.aspect(for: photo))
+        }
     }
 
     private func load() async {
@@ -273,7 +275,7 @@ struct ArrangePhotosView: View {
         placements = photos.enumerated().map { layout.resolvedPlacement(for: $1, index: $0, count: photos.count) }
         for photo in photos {
             if let source = session.borderImages[photo.assetID] {
-                images[photo.assetID] = ArtworkRenderer.croppedImage(source, photo: photo, aspect: layout.photoAspect)
+                images[photo.assetID] = ArtworkRenderer.croppedImage(source, photo: photo, aspect: layout.aspect(for: photo))
             }
         }
         guard let input = session.input else { return }
