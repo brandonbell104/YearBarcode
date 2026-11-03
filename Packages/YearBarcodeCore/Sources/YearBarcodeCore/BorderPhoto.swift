@@ -100,6 +100,14 @@ public struct OrientedRect: Hashable, Sendable {
     public var height: Double
     public var rotation: Double
 
+    public init(centerX: Double, centerY: Double, width: Double, height: Double, rotation: Double = 0) {
+        self.centerX = centerX
+        self.centerY = centerY
+        self.width = width
+        self.height = height
+        self.rotation = rotation
+    }
+
     /// Corners in clockwise order starting top-left (before rotation).
     public var corners: [(x: Double, y: Double)] {
         let c = cos(rotation), s = sin(rotation)
