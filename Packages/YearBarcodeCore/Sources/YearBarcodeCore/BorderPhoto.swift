@@ -146,9 +146,19 @@ extension PosterLayout {
     /// The tidy default layout (row in landscape, side borders in portrait). The
     /// photo keeps its own shape and is sized to fit inside its slot.
     public func defaultPlacement(index: Int, count: Int, aspect: Double? = nil) -> BorderPlacement {
-        let slots = photoSlots(count: count)
-        let slot = slots[min(index, slots.count - 1)]
         let shape = aspect ?? photoAspect
+        let slots = photoSlots(count: count)
+        guard index < slots.count else {
+            // Beyond the tidy slots: cascade from the center so each new photo is visible.
+            let step = 0.03 * Double(index - slots.count)
+            let width = shape >= 1 ? 0.15 : 0.15 * shape
+            return BorderPlacement(
+                centerX: min(0.9, 0.5 + step),
+                centerY: min(0.9, 0.5 + step * Double(canvas.width) / Double(canvas.height)),
+                width: width
+            )
+        }
+        let slot = slots[index]
         let width = min(Double(slot.width), Double(slot.height) * shape)
         return BorderPlacement(
             centerX: (Double(slot.x) + Double(slot.width) / 2) / Double(canvas.width),

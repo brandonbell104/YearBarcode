@@ -44,6 +44,7 @@ public struct PixelRect: Codable, Hashable, Sendable {
 /// V1 constants (proposed, not printing standards): the barcode covers 90% of
 /// the long side and 75% of the short side, centered.
 public struct PosterLayout: Hashable, Sendable {
+    /// Number of tidy default slots for photos; photos beyond this start near the center.
     public static let maxBorderPhotos = 4
     public static let watermarkText = "Made with Year Barcode"
 

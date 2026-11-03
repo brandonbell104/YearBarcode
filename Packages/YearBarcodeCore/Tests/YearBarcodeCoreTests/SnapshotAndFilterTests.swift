@@ -193,3 +193,48 @@ private extension ImageFingerprint {
         ImageFingerprint(differenceHash: differenceHash, contentHash: content)
     }
 }
+
+final class PosterDesignTests: XCTestCase {
+    func testLegacyPhotoListBecomesStandardDesign() throws {
+        let legacy = try JSONEncoder().encode([BorderPhoto(assetID: "a"), BorderPhoto(assetID: "b")])
+        let design = PosterDesign.decode(legacy)
+        XCTAssertEqual(design.layers.map(\.id), ["text:year", "text:count", "photo:a", "photo:b"])
+        XCTAssertEqual(design.photos.map(\.assetID), ["a", "b"])
+
+        let roundTrip = PosterDesign.decode(try JSONEncoder().encode(design))
+        XCTAssertEqual(roundTrip, design)
+        XCTAssertEqual(PosterDesign.decode(Data("garbage".utf8)), .standard())
+    }
+
+    func testReorderingLayers() {
+        var design = PosterDesign.standard(photos: [BorderPhoto(assetID: "a"), BorderPhoto(assetID: "b")])
+        design.move(from: 3, to: 0) // photo b to the bottom
+        XCTAssertEqual(design.layers.map(\.id), ["photo:b", "text:year", "text:count", "photo:a"])
+        design.move(from: 0, to: 3) // and back to the top
+        XCTAssertEqual(design.layers.map(\.id), ["text:year", "text:count", "photo:a", "photo:b"])
+        design.move(from: 9, to: 0) // out of range is ignored
+        XCTAssertEqual(design.layers.count, 4)
+    }
+
+    func testTextLayerDefaultsMatchTheClassicLabels() {
+        let layout = PosterLayout(printSize: .size24x36, orientation: .landscape)
+        let year = TextLayer(id: "year", role: .year)
+        XCTAssertEqual(year.displayText(year: 2025, includedPhotos: 10), "2025")
+        XCTAssertEqual(TextLayer(role: .photoCount).displayText(year: 2025, includedPhotos: 7842, locale: Locale(identifier: "en_US")), "7,842 photos")
+        XCTAssertEqual(TextLayer(role: .year, text: "Our year").displayText(year: 2025, includedPhotos: 1), "Our year")
+
+        let position = layout.position(for: year)
+        XCTAssertEqual(position.centerY * 7200, Double(layout.yearLabel.y) + Double(layout.yearLabel.height) / 2, accuracy: 1)
+        XCTAssertEqual(layout.fontSize(for: year), Double(layout.yearLabel.height) / 1.25, accuracy: 1)
+        // Sizes are clamped.
+        XCTAssertEqual(layout.fontSize(for: TextLayer(role: .custom, size: 5)), TextLayer.maxSize * 7200, accuracy: 1e-6)
+    }
+
+    func testPhotosBeyondTheDefaultSlotsStayOnThePoster() {
+        let layout = PosterLayout(printSize: .size18x24, orientation: .portrait)
+        for index in 0..<PosterDesign.maxPhotos {
+            let placement = layout.defaultPlacement(index: index, count: PosterDesign.maxPhotos, aspect: 0.75)
+            XCTAssertTrue(layout.isValid(placement), "photo \(index)")
+        }
+    }
+}

@@ -201,7 +201,9 @@ struct GenerationRecord: Identifiable, Hashable, Sendable {
 struct ArtworkRecord: Hashable, Sendable {
     var generationID: UUID
     var settings: ArtworkSettings
-    var borderPhotos: [BorderPhoto]
+    /// Photo and text layers. Stored in the `border_photos` column; older rows
+    /// holding a plain photo list are converted on read.
+    var design: PosterDesign
     var exportPath: String?
 }
 
@@ -375,7 +377,7 @@ extension Database {
             result = ArtworkRecord(
                 generationID: id,
                 settings: (try? decoder.decode(ArtworkSettings.self, from: Data((s.text(0) ?? "").utf8))) ?? .default,
-                borderPhotos: (try? decoder.decode([BorderPhoto].self, from: Data((s.text(1) ?? "[]").utf8))) ?? [],
+                design: PosterDesign.decode(Data((s.text(1) ?? "[]").utf8)),
                 exportPath: s.text(2)
             )
         }
@@ -386,7 +388,7 @@ extension Database {
         try run("""
         INSERT OR REPLACE INTO artwork (generation_id, settings, border_photos, export_path, updated_at) VALUES (?, ?, ?, ?, ?)
         """, [
-            .text(artwork.generationID.uuidString), .text(try json(artwork.settings)), .text(try json(artwork.borderPhotos)),
+            .text(artwork.generationID.uuidString), .text(try json(artwork.settings)), .text(try json(artwork.design)),
             .optionalText(artwork.exportPath), .double(Date().timeIntervalSince1970),
         ])
     }

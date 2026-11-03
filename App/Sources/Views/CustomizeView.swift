@@ -6,8 +6,6 @@ struct CustomizeView: View {
     @Environment(AppModel.self) private var model
     let generationID: UUID
     @State private var session: ArtworkSession?
-    @State private var showPicker = false
-    @State private var cropping: BorderPhoto?
     @State private var arranging = false
 
     var body: some View {
@@ -52,57 +50,28 @@ struct CustomizeView: View {
             }
 
             Section {
-                ForEach(session.artwork.borderPhotos) { photo in
-                    HStack(spacing: 12) {
-                        AssetThumbnail(assetID: photo.assetID, side: 56)
-                        Text(photo.assetID == session.replacementNeeded ? "Unavailable - replace" : "Photo")
-                            .foregroundStyle(photo.assetID == session.replacementNeeded ? Color.red : Color.primary)
-                        Spacer()
-                        Button(photo.zoom > 1.001 ? "Cropped" : "Crop") { cropping = photo }.buttonStyle(.borderless)
-                    }
+                Button {
+                    arranging = true
+                } label: {
+                    Label("Edit Layout", systemImage: "square.on.square.dashed")
                 }
-                .onMove { from, to in
-                    var photos = session.artwork.borderPhotos
-                    photos.move(fromOffsets: from, toOffset: to)
-                    Task { await session.setBorderPhotos(photos) }
+                Text(layoutSummary(session.artwork.design))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let missing = session.replacementNeeded {
+                    Label("A photo on the poster is no longer available (\(missing.prefix(8))…). Open Edit Layout to remove or replace it.", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
                 }
-                .onDelete { offsets in
-                    var photos = session.artwork.borderPhotos
-                    photos.remove(atOffsets: offsets)
-                    Task { await session.setBorderPhotos(photos) }
-                }
-                if session.artwork.borderPhotos.count < PosterLayout.maxBorderPhotos {
-                    Button {
-                        showPicker = true
-                    } label: {
-                        Label("Add Border Photo", systemImage: "plus")
-                    }
-                }
-                if !session.artwork.borderPhotos.isEmpty {
-                    Button {
-                        arranging = true
-                    } label: {
-                        Label("Move, Resize & Rotate", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
-                    }
-                    if session.artwork.borderPhotos.contains(where: { $0.placement != nil }) {
-                        Button("Reset Layout", role: .destructive) {
-                            let photos = session.artwork.borderPhotos.map { photo -> BorderPhoto in
-                                var photo = photo
-                                photo.placement = nil
-                                return photo
-                            }
-                            Task { await session.setBorderPhotos(photos) }
-                        }
+                if session.artwork.design != resetDesign(session.artwork.design) {
+                    Button("Reset Positions & Sizes", role: .destructive) {
+                        Task { await session.setDesign(resetDesign(session.artwork.design)) }
                     }
                 }
             } header: {
-                HStack {
-                    Text("Border photos (optional, up to 4)")
-                    Spacer()
-                    if !session.artwork.borderPhotos.isEmpty { EditButton().font(.caption) }
-                }
+                Text("Photos & Text")
             } footer: {
-                Text("Photos are decorative and can go anywhere, even over the barcode. They don't change its colors or the photo count.")
+                Text("Add photos and text, then move, resize, rotate and stack them anywhere on the poster, even over the barcode. They never change the barcode's colors or the photo count.")
             }
 
             Section {
@@ -141,34 +110,8 @@ struct CustomizeView: View {
                 Text("Previews and exports are free at every size. One purchase removes the small \"\(PosterLayout.watermarkText)\" line from future renders for all years. Files you already exported stay as they are.")
             }
         }
-        .sheet(isPresented: $showPicker) {
-            BorderPhotoPicker(
-                assetIDs: session.report?.included.map(\.assetID) ?? [],
-                alreadyChosen: Set(session.artwork.borderPhotos.map(\.assetID))
-            ) { assetID in
-                var photos = session.artwork.borderPhotos
-                if let missing = session.replacementNeeded, let index = photos.firstIndex(where: { $0.assetID == missing }) {
-                    photos[index] = BorderPhoto(assetID: assetID, placement: photos[index].placement, aspect: session.aspect(of: assetID))
-                    session.replacementNeeded = nil
-                } else {
-                    photos.append(BorderPhoto(assetID: assetID, aspect: session.aspect(of: assetID)))
-                }
-                Task { await session.setBorderPhotos(photos) }
-            }
-        }
-        .sheet(item: $cropping) { photo in
-            CropEditor(
-                photo: photo,
-                image: session.borderImages[photo.assetID],
-                slotAspect: layout(session).aspect(for: photo)
-            ) { updated in
-                var photos = session.artwork.borderPhotos
-                if let index = photos.firstIndex(where: { $0.assetID == updated.assetID }) { photos[index] = updated }
-                Task { await session.setBorderPhotos(photos) }
-            }
-        }
         .fullScreenCover(isPresented: $arranging) {
-            ArrangePhotosView(session: session)
+            LayoutEditorView(session: session)
         }
         .sheet(isPresented: Binding(
             get: { if case .ready = session.exportState { return true } else { return false } },
@@ -219,8 +162,25 @@ struct CustomizeView: View {
         }
     }
 
-    private func layout(_ session: ArtworkSession) -> PosterLayout {
-        PosterLayout(printSize: session.artwork.settings.printSize, orientation: session.artwork.settings.orientation)
+    private func layoutSummary(_ design: PosterDesign) -> String {
+        let photos = design.photos.count
+        let texts = design.layers.count - photos
+        return "\(photos) \(photos == 1 ? "photo" : "photos") · \(texts) text \(texts == 1 ? "block" : "blocks")"
+    }
+
+    /// Same layers, contents and styles, back in their default spots and sizes.
+    private func resetDesign(_ design: PosterDesign) -> PosterDesign {
+        PosterDesign(layers: design.layers.map { layer in
+            switch layer {
+            case .photo(var photo):
+                photo.placement = nil
+                return .photo(photo)
+            case .text(var text):
+                text.position = nil
+                text.size = nil
+                return .text(text)
+            }
+        })
     }
 }
 

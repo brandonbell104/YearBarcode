@@ -36,7 +36,7 @@ final class ArtworkSession {
         self.generationID = generationID
         self.model = model
         artwork = model.artwork(for: generationID)
-            ?? ArtworkRecord(generationID: generationID, settings: model.generation(generationID)?.settings ?? .default, borderPhotos: [], exportPath: nil)
+            ?? ArtworkRecord(generationID: generationID, settings: model.generation(generationID)?.settings ?? .default, design: .standard(), exportPath: nil)
     }
 
     var showWatermark: Bool { !model.purchases.isUnlocked }
@@ -57,11 +57,28 @@ final class ArtworkSession {
         await rebuild()
     }
 
-    func setBorderPhotos(_ photos: [BorderPhoto]) async {
-        artwork.borderPhotos = Array(photos.prefix(PosterLayout.maxBorderPhotos))
+    /// Replaces the layer stack (photos and text) and re-renders the preview.
+    func setDesign(_ design: PosterDesign) async {
+        artwork.design = design
         model.save(artwork)
         await loadBorderImages()
         await rebuild()
+    }
+
+    /// Replaces one photo layer (matched by asset) keeping its place in the stack.
+    func updatePhoto(_ photo: BorderPhoto) async {
+        var design = artwork.design
+        if let index = design.layers.firstIndex(where: { $0.id == PosterLayer.photo(photo).id }) {
+            design.layers[index] = .photo(photo)
+        }
+        await setDesign(design)
+    }
+
+    /// A screen-sized copy of a library photo, for the layout editor.
+    func displayImage(for assetID: String) async -> UIImage? {
+        if let cached = borderImages[assetID] { return cached }
+        guard let asset = model.library.asset(id: assetID) else { return nil }
+        return try? await model.library.image(for: asset, targetSize: CGSize(width: 600, height: 600))
     }
 
     /// The photo's own width / height (PhotoKit reports display-oriented pixels).
@@ -73,17 +90,15 @@ final class ArtworkSession {
     /// Photos added before shapes were stored get their real shape, so they
     /// stop being cropped to the slot.
     private func fillMissingAspects() {
-        guard artwork.borderPhotos.contains(where: { $0.aspect == nil }) else { return }
-        artwork.borderPhotos = artwork.borderPhotos.map { photo in
-            var photo = photo
-            if photo.aspect == nil {
-                photo.aspect = aspect(of: photo.assetID)
-                // The old crop was for the slot shape; show the whole photo instead.
-                photo.zoom = 1
-                photo.centerX = 0.5
-                photo.centerY = 0.5
-            }
-            return photo
+        guard artwork.design.photos.contains(where: { $0.aspect == nil }) else { return }
+        artwork.design.layers = artwork.design.layers.map { layer in
+            guard case .photo(var photo) = layer, photo.aspect == nil else { return layer }
+            photo.aspect = aspect(of: photo.assetID)
+            // The old crop was for the slot shape; show the whole photo instead.
+            photo.zoom = 1
+            photo.centerX = 0.5
+            photo.centerY = 0.5
+            return .photo(photo)
         }
         model.save(artwork)
     }
@@ -93,12 +108,12 @@ final class ArtworkSession {
         guard let report else { return }
         let settings = artwork.settings
         let year = report.snapshot.year
-        let photos = artwork.borderPhotos
+        let design = artwork.design
         let images = borderImages
         let watermark = showWatermark
         let result = await Task.detached(priority: .userInitiated) { () -> (BarcodeData, CGImage?) in
             let data = report.barcode(for: settings)
-            let input = ArtworkInput(year: year, settings: settings, barcode: data, borderPhotos: photos, showWatermark: watermark)
+            let input = ArtworkInput(year: year, settings: settings, barcode: data, design: design, showWatermark: watermark)
             return (data, ArtworkRenderer.preview(input, borderImages: images))
         }.value
         barcode = result.0
@@ -107,7 +122,7 @@ final class ArtworkSession {
 
     private func loadBorderImages() async {
         var images: [String: UIImage] = [:]
-        for photo in artwork.borderPhotos {
+        for photo in artwork.design.photos {
             if let image = borderImages[photo.assetID] {
                 images[photo.assetID] = image
             } else if let asset = model.library.asset(id: photo.assetID),
@@ -121,7 +136,7 @@ final class ArtworkSession {
     var input: ArtworkInput? {
         guard let report, let barcode else { return nil }
         return ArtworkInput(year: report.snapshot.year, settings: artwork.settings, barcode: barcode,
-                            borderPhotos: artwork.borderPhotos, showWatermark: showWatermark)
+                            design: artwork.design, showWatermark: showWatermark)
     }
 
     /// Full-resolution PNG, generated only on Save or Share.
