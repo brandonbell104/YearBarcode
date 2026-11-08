@@ -96,7 +96,6 @@ struct CustomizeView: View {
         }
         .fullScreenCover(isPresented: $editing) {
             LayoutEditorView(session: session)
-                .preferredColorScheme(.dark)
                 .tint(Theme.accent)
         }
         .sheet(isPresented: Binding(
@@ -281,7 +280,7 @@ struct CustomizeView: View {
             case .savedToPhotos:
                 Label("Saved to Photos", systemImage: "checkmark.circle.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0x30D158))
+                    .foregroundStyle(Theme.success)
             case .failed(let message):
                 Text(message).font(.system(size: 12)).foregroundStyle(Theme.destructive)
             default:

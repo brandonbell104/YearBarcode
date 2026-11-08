@@ -4,12 +4,13 @@ import SwiftUI
 struct YearBarcodeApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.dark.rawValue
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme((Appearance(rawValue: appearance) ?? .dark).colorScheme)
                 .tint(Theme.accent)
                 .task { await model.onLaunch() }
                 .onChange(of: scenePhase) { _, phase in
@@ -36,6 +37,7 @@ struct RootView: View {
                             case .progress(let id): JobProgressView(generationID: id)
                             case .artwork(let id): ArtworkView(generationID: id)
                             case .customize(let id): CustomizeView(generationID: id)
+                            case .saved: SavedPostersView()
                             }
                         }
                 }

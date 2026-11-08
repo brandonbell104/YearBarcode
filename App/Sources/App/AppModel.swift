@@ -7,6 +7,7 @@ enum Route: Hashable {
     case progress(UUID)
     case artwork(UUID)
     case customize(UUID)
+    case saved
 }
 
 @MainActor
@@ -29,8 +30,8 @@ final class AppModel {
     var progress: [UUID: JobProgress] = [:]
     /// Colors of photos analyzed so far in a running job (for the live barcode).
     var liveColors: [UUID: [RGB8]] = [:]
-    /// Quick color previews for the year cards, from a few on-device thumbnails.
-    var yearPreviews: [Int: [RGB8]] = [:]
+    /// Real barcode colors for years that have a finished poster (latest one).
+    var yearBarcodes: [Int: [RGB8]] = [:]
     var path: [Route] = []
     var alert: String?
 
@@ -81,12 +82,32 @@ final class AppModel {
         isLoadingYears = false
     }
 
-    /// Builds a year card's preview once, from ~48 photos spread through the year.
-    func loadYearPreview(_ year: Int) async {
-        guard yearPreviews[year] == nil, authorization.access != nil else { return }
-        yearPreviews[year] = []
-        let library = self.library
-        yearPreviews[year] = await library.quickColors(year: year, samples: 48, timeZone: .current)
+    /// The most recent finished poster for a year, if any.
+    func latestFinished(year: Int) -> GenerationRecord? {
+        generations.first { $0.year == year && $0.status == .finished }
+    }
+
+    /// Loads a year card's barcode from its latest finished poster, once.
+    func loadYearBarcode(_ year: Int) async {
+        guard yearBarcodes[year] == nil, let record = latestFinished(year: year) else { return }
+        yearBarcodes[year] = []
+        guard let report = try? await engine.report(for: record.id) else { return }
+        let settings = artwork(for: record.id)?.settings ?? record.settings
+        let colors = await Task.detached(priority: .utility) {
+            StripeGeometry.previewColors(report.barcode(for: settings).stripes, pixels: 60)
+        }.value
+        yearBarcodes[year] = colors
+    }
+
+    /// Copies a poster (same photos and analysis, same design) so a new
+    /// version can be edited while the original stays as it is.
+    func duplicate(_ id: UUID) -> UUID? {
+        guard let newID = try? database.duplicateGeneration(id) else {
+            alert = "Couldn't create a new version."
+            return nil
+        }
+        refreshGenerations()
+        return newID
     }
 
     func refreshGenerations() {
@@ -133,6 +154,7 @@ final class AppModel {
     func delete(_ id: UUID) {
         runner.cancel(id)
         sessions[id] = nil
+        if let year = generation(id)?.year { yearBarcodes[year] = nil }
         try? database.deleteGeneration(id)
         refreshGenerations()
     }
@@ -146,6 +168,7 @@ final class AppModel {
         if !update.newColors.isEmpty { liveColors[id, default: []] += update.newColors }
         if update.status != .analyzing {
             refreshGenerations()
+            if update.status == .finished, let year = generation(id)?.year { yearBarcodes[year] = nil }
             // Results changed; the next visit rebuilds from the database.
             sessions[id] = nil
         }

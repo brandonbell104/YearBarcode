@@ -4,18 +4,44 @@ import YearBarcodeCore
 /// The app's dark design language: near-black canvas, light primary buttons,
 /// rounded charcoal cards and a single orange accent.
 enum Theme {
-    static let background = Color(hex: 0x0A0A0B)
-    static let card = Color(hex: 0x161618)
-    static let control = Color(hex: 0x1C1C1F)
-    static let controlSelected = Color(hex: 0x3A3A3F)
-    static let posterWell = Color(hex: 0x151517)
-    static let hairline = Color(hex: 0x2C2C30)
-    static let primaryText = Color(hex: 0xF5F5F7)
-    static let secondaryText = Color(hex: 0xA1A1A6)
-    static let tertiaryText = Color(hex: 0x8E8E93)
-    static let bodyText = Color(hex: 0xD1D1D6)
-    static let accent = Color(hex: 0xFF9F0A)
-    static let destructive = Color(hex: 0xFF6961)
+    static let background = Color(light: 0xF2F2F7, dark: 0x0A0A0B)
+    static let card = Color(light: 0xFFFFFF, dark: 0x161618)
+    static let control = Color(light: 0xE5E5EA, dark: 0x1C1C1F)
+    static let controlSelected = Color(light: 0xFFFFFF, dark: 0x3A3A3F)
+    static let posterWell = Color(light: 0xE5E5EA, dark: 0x151517)
+    static let hairline = Color(light: 0xD1D1D6, dark: 0x2C2C30)
+    static let primaryText = Color(light: 0x1C1C1E, dark: 0xF5F5F7)
+    static let secondaryText = Color(light: 0x6E6E73, dark: 0xA1A1A6)
+    static let tertiaryText = Color(light: 0x8E8E93, dark: 0x8E8E93)
+    static let bodyText = Color(light: 0x3A3A3C, dark: 0xD1D1D6)
+    static let accent = Color(light: 0xF28C00, dark: 0xFF9F0A)
+    static let destructive = Color(light: 0xE5372C, dark: 0xFF6961)
+    static let success = Color(light: 0x248A3D, dark: 0x30D158)
+}
+
+/// The user's appearance choice (Settings). Dark is the default look.
+enum Appearance: String, CaseIterable {
+    case system
+    case light
+    case dark
+
+    static let storageKey = "appearance"
+
+    var title: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
 }
 
 extension Color {
@@ -24,6 +50,19 @@ extension Color {
                   red: Double((hex >> 16) & 0xFF) / 255,
                   green: Double((hex >> 8) & 0xFF) / 255,
                   blue: Double(hex & 0xFF) / 255)
+    }
+
+    /// A color that follows light and dark mode.
+    init(light: UInt32, dark: UInt32) {
+        self.init(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1
+            )
+        })
     }
 }
 
@@ -232,6 +271,18 @@ enum DecorativeStripes {
             h += (random() - 0.5) * 18; l += (random() - 0.5) * 16; sat += (random() - 0.5) * 14
             l = min(max(l, 6), 88); sat = min(max(sat, 4), 85)
             return Color(hsl: (h + 360).truncatingRemainder(dividingBy: 360), sat / 100, l / 100)
+        }
+    }
+}
+
+extension DecorativeStripes {
+    /// Plain gray stripes: clearly a stand-in, not anyone's real year.
+    static func placeholder(_ n: Int, seed: Int = 5) -> [Color] {
+        var s = seed
+        return (0..<n).map { _ in
+            s = (s * 16807) % 2147483647
+            let l = 0.78 + Double(s % 1000) / 1000 * 0.14
+            return Color(.sRGB, red: l, green: l, blue: l)
         }
     }
 }

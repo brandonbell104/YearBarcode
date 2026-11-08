@@ -259,6 +259,29 @@ extension Database {
                 [.text(status.rawValue), .optionalText(interruption?.rawValue), .text(id.uuidString)])
     }
 
+    /// Copies a generation's snapshot, manifest and artwork under a new ID.
+    /// Analyses are shared by asset and revision, so nothing is re-analyzed.
+    func duplicateGeneration(_ id: UUID) throws -> UUID {
+        let newID = UUID()
+        let now = Date().timeIntervalSince1970
+        try transaction {
+            try run("""
+            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at)
+            SELECT ?, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, ?
+            FROM generation WHERE id = ?
+            """, [.text(newID.uuidString), .double(now), .text(id.uuidString)])
+            try run("""
+            INSERT INTO manifest (generation_id, position, asset_id, revision, capture_date, day_year, day_ordinal, status)
+            SELECT ?, position, asset_id, revision, capture_date, day_year, day_ordinal, status FROM manifest WHERE generation_id = ?
+            """, [.text(newID.uuidString), .text(id.uuidString)])
+            try run("""
+            INSERT INTO artwork (generation_id, settings, border_photos, export_path, updated_at)
+            SELECT ?, settings, border_photos, NULL, ? FROM artwork WHERE generation_id = ?
+            """, [.text(newID.uuidString), .double(now), .text(id.uuidString)])
+        }
+        return newID
+    }
+
     func deleteGeneration(_ id: UUID) throws {
         try run("DELETE FROM generation WHERE id = ?", [.text(id.uuidString)])
     }

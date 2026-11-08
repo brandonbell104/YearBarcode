@@ -7,7 +7,7 @@ struct YearsView: View {
     @State private var selectedYear: Int?
     @State private var settings = ArtworkSettings.default
     @State private var isGenerating = false
-    @State private var showSaved = false
+    @State private var showSettings = false
 
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
 
@@ -16,15 +16,34 @@ struct YearsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Spacer()
-                        Button { showSaved = true } label: {
-                            Image(systemName: "rectangle.split.3x1")
+                        Button { showSettings = true } label: {
+                            Image(systemName: "gearshape")
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundStyle(Theme.primaryText)
                                 .frame(width: 44, height: 44)
                                 .background(Theme.control, in: Circle())
                         }
-                        .accessibilityLabel("Saved posters")
+                        .accessibilityLabel("Settings")
+                        Spacer()
+                        Button { model.path.append(.saved) } label: {
+                            Image(systemName: "rectangle.split.3x1")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(Theme.primaryText)
+                                .frame(width: 44, height: 44)
+                                .background(Theme.control, in: Circle())
+                                .overlay(alignment: .topTrailing) {
+                                    if !model.generations.isEmpty {
+                                        Text("\(model.generations.count)")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(Theme.background)
+                                            .padding(.horizontal, 5)
+                                            .frame(minWidth: 18, minHeight: 18)
+                                            .background(Theme.accent, in: Capsule())
+                                            .offset(x: 4, y: -4)
+                                    }
+                                }
+                        }
+                        .accessibilityLabel("Saved posters, \(model.generations.count)")
                     }
                     .padding(.horizontal, 16)
 
@@ -72,7 +91,7 @@ struct YearsView: View {
         .onChange(of: model.years, initial: true) { _, years in
             if selectedYear == nil || !years.contains(selectedYear!) { selectedYear = years.first }
         }
-        .sheet(isPresented: $showSaved) { SavedPostersView() }
+        .sheet(isPresented: $showSettings) { SettingsView() }
     }
 
     // MARK: - Sections
@@ -88,16 +107,17 @@ struct YearsView: View {
                         .frame(height: 180)
                 }
                 ForEach(model.years, id: \.self) { year in
+                    let latest = model.latestFinished(year: year)
                     YearCard(
                         year: year,
                         count: model.yearCounts[year],
-                        colors: model.yearPreviews[year] ?? [],
+                        colors: latest == nil ? nil : model.yearBarcodes[year],
+                        generated: latest != nil,
                         tag: tag(for: year),
-                        tagIsAccent: year == currentYear,
                         selected: year == selectedYear
                     )
                     .onTapGesture { selectedYear = year }
-                    .task { await model.loadYearPreview(year) }
+                    .task(id: latest?.id) { await model.loadYearBarcode(year) }
                 }
             }
             .padding(.horizontal, 24)
@@ -106,9 +126,11 @@ struct YearsView: View {
     }
 
     private func tag(for year: Int) -> String? {
+        if let latest = model.latestFinished(year: year) {
+            return "Generated " + latest.createdAt.formatted(.dateTime.month(.abbreviated).day())
+        }
         if year == currentYear { return "Through today" }
-        if model.generations.contains(where: { $0.year == year && $0.status == .finished }) { return "Saved poster" }
-        return nil
+        return "Not generated yet"
     }
 
     private var modeSection: some View {
@@ -184,27 +206,44 @@ struct YearsView: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
     private var generateButton: some View {
-        Button {
-            guard let year = selectedYear else { return }
-            isGenerating = true
-            Task {
-                await model.generate(year: year, settings: settings)
-                isGenerating = false
-            }
-        } label: {
+        if let year = selectedYear, let latest = model.latestFinished(year: year) {
             HStack(spacing: 10) {
-                if isGenerating {
-                    ProgressView().tint(Theme.background)
-                } else {
-                    Image(systemName: "barcode")
-                    Text("Generate \(selectedYear.map(String.init) ?? "")")
+                Button("View \(String(year)) Poster") { model.path.append(.artwork(latest.id)) }
+                    .buttonStyle(.primary)
+                Button { generate(year) } label: {
+                    if isGenerating { ProgressView() } else { Text("Generate again") }
+                }
+                .buttonStyle(.secondary)
+                .frame(maxWidth: 150)
+                .disabled(isGenerating)
+            }
+        } else {
+            Button {
+                if let year = selectedYear { generate(year) }
+            } label: {
+                HStack(spacing: 10) {
+                    if isGenerating {
+                        ProgressView().tint(Theme.background)
+                    } else {
+                        Image(systemName: "barcode")
+                        Text("Generate \(selectedYear.map(String.init) ?? "")")
+                    }
                 }
             }
+            .buttonStyle(.primary)
+            .disabled(selectedYear == nil || isGenerating)
+            .opacity(selectedYear == nil ? 0.5 : 1)
         }
-        .buttonStyle(.primary)
-        .disabled(selectedYear == nil || isGenerating)
-        .opacity(selectedYear == nil ? 0.5 : 1)
+    }
+
+    private func generate(_ year: Int) {
+        isGenerating = true
+        Task {
+            await model.generate(year: year, settings: settings)
+            isGenerating = false
+        }
     }
 }
 
@@ -213,24 +252,44 @@ struct YearsView: View {
 private struct YearCard: View {
     let year: Int
     let count: Int?
-    let colors: [RGB8]
+    /// Real barcode colors (generated years); nil shows the placeholder.
+    let colors: [RGB8]?
+    let generated: Bool
     let tag: String?
-    let tagIsAccent: Bool
     let selected: Bool
+
+    private static let placeholder = DecorativeStripes.placeholder(60)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
                 Color.white
-                if colors.isEmpty {
-                    StripesView(colors: Array(repeating: Color(hex: 0xE5E5EA), count: 1))
-                        .padding(10)
-                } else {
+                if generated, let colors, !colors.isEmpty {
                     StripesView(colors: colors.map { Color($0) }).padding(10)
+                } else if generated {
+                    ProgressView().tint(Color(hex: 0x8E8E93))
+                } else {
+                    StripesView(colors: Self.placeholder).padding(10)
+                    Text("Preview")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.white.opacity(0.9), in: Capsule())
                 }
             }
             .frame(height: 104)
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(alignment: .topTrailing) {
+                if generated {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Theme.accent)
+                        .padding(6)
+                        .accessibilityHidden(true)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(year))
@@ -242,7 +301,8 @@ private struct YearCard: View {
                     .foregroundStyle(Theme.secondaryText)
                 Text(tag ?? " ")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(tagIsAccent ? Theme.accent : Theme.tertiaryText)
+                    .foregroundStyle(generated ? Theme.accent : Theme.tertiaryText)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 4)
         }
@@ -252,6 +312,7 @@ private struct YearCard: View {
         .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(selected ? Theme.accent : .clear, lineWidth: 2))
         .contentShape(RoundedRectangle(cornerRadius: 22))
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(year), \(generated ? "generated" : "not generated yet")")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
@@ -282,61 +343,5 @@ private struct OrientationCard: View {
         .contentShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-    }
-}
-
-// MARK: - Saved posters
-
-struct SavedPostersView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if model.generations.isEmpty {
-                    Text("Posters you generate appear here.")
-                        .foregroundStyle(Theme.secondaryText)
-                        .listRowBackground(Theme.card)
-                }
-                ForEach(model.generations) { record in
-                    Button {
-                        dismiss()
-                        model.path = [record.status == .finished ? .artwork(record.id) : .progress(record.id)]
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(String(record.year)).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.primaryText)
-                                Text(subtitle(record)).font(.system(size: 13)).foregroundStyle(Theme.secondaryText)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(Theme.tertiaryText)
-                        }
-                    }
-                    .listRowBackground(Theme.card)
-                }
-                .onDelete { offsets in
-                    for index in offsets { model.delete(model.generations[index].id) }
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.background)
-            .navigationTitle("Saved posters")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.tint(Theme.accent) }
-            }
-        }
-    }
-
-    private func subtitle(_ record: GenerationRecord) -> String {
-        let created = record.createdAt.formatted(date: .abbreviated, time: .shortened)
-        switch record.status {
-        case .finished: return "\(record.settings.printSize.shortInches) × \(record.settings.printSize.longInches) · \(created)"
-        case .analyzing: return "Analyzing…"
-        case .paused: return "Paused"
-        case .interrupted: return "Interrupted · tap to resume"
-        case .cancelled: return "Cancelled"
-        }
     }
 }
