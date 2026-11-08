@@ -6,21 +6,56 @@ public struct IncludedPhoto: Hashable, Sendable {
     public var captureDate: Date
     public var day: DayKey
     public var color: LinearRGB
+    public var rows: [RGB8]?
+    public var columns: [RGB8]?
 
-    public init(assetID: String, captureDate: Date, day: DayKey, color: LinearRGB) {
+    public init(assetID: String, captureDate: Date, day: DayKey, color: LinearRGB, rows: [RGB8]? = nil, columns: [RGB8]? = nil) {
         self.assetID = assetID
         self.captureDate = captureDate
         self.day = day
         self.color = color
+        self.rows = rows
+        self.columns = columns
     }
 }
 
 /// One stripe. `sum` is nil for an Every-Day slot with no photos (drawn white).
 public struct Stripe: Codable, Hashable, Sendable {
     public var sum: ColorSum?
+    /// Squeezed-photo profiles of the stripe's photos (top to bottom, left to
+    /// right), when every photo in it has one.
+    public var rows: ProfileSum?
+    public var columns: ProfileSum?
 
-    public init(sum: ColorSum?) {
+    public init(sum: ColorSum?, rows: ProfileSum? = nil, columns: ProfileSum? = nil) {
         self.sum = sum
+        self.rows = rows
+        self.columns = columns
+    }
+
+    /// Equal-weight stripe from a run of photos.
+    public init<C: Collection>(photos: C) where C.Element == IncludedPhoto {
+        var sum = ColorSum()
+        var rows: ProfileSum?
+        var columns: ProfileSum?
+        var profiled = true
+        for photo in photos {
+            sum.add(photo.color)
+            if profiled, let r = photo.rows, let c = photo.columns {
+                if rows == nil { rows = ProfileSum(length: r.count); columns = ProfileSum(length: c.count) }
+                rows?.add(r)
+                columns?.add(c)
+            } else {
+                profiled = false
+            }
+        }
+        self.init(sum: sum, rows: profiled ? rows : nil, columns: profiled ? columns : nil)
+    }
+
+    /// The profile along the stripe for an orientation: landscape stripes run
+    /// top to bottom, portrait stripes left to right.
+    public func profile(for orientation: Orientation) -> [RGB8]? {
+        (orientation == .landscape ? rows : columns)?.average
     }
 
     public var rgb8: RGB8 { sum?.average?.rgb8 ?? .white }
@@ -57,7 +92,7 @@ public enum Grouper {
     /// that keep chronological order and never cross a day boundary.
     public static func everyPhoto(_ sorted: [IncludedPhoto], capacity: Int) -> [Stripe] {
         if sorted.count <= capacity {
-            return sorted.map { Stripe(sum: ColorSum($0.color)) }
+            return sorted.map { Stripe(photos: [$0]) }
         }
         var days: [[IncludedPhoto]] = []
         for photo in sorted {
@@ -72,9 +107,7 @@ public enum Grouper {
         stripes.reserveCapacity(capacity)
         for (photos, groups) in zip(days, allocation) {
             for range in partition(count: photos.count, groups: groups) {
-                var sum = ColorSum()
-                for photo in photos[range] { sum.add(photo.color) }
-                stripes.append(Stripe(sum: sum))
+                stripes.append(Stripe(photos: photos[range]))
             }
         }
         return stripes
@@ -83,9 +116,9 @@ public enum Grouper {
     /// One equal stripe per day that has photos, in date order. Days without
     /// photos are left out, so the barcode has no gaps and never invents a color.
     public static func everyDay(_ photos: [IncludedPhoto]) -> [Stripe] {
-        var sums: [DayKey: ColorSum] = [:]
-        for photo in photos { sums[photo.day, default: ColorSum()].add(photo.color) }
-        return sums.keys.sorted().map { Stripe(sum: sums[$0]) }
+        var days: [DayKey: [IncludedPhoto]] = [:]
+        for photo in photos { days[photo.day, default: []].append(photo) }
+        return days.keys.sorted().map { Stripe(photos: days[$0]!) }
     }
 
     /// Capped proportional allocation of `capacity` groups across days.
@@ -164,6 +197,26 @@ extension StripeGeometry {
             var sum = ColorSum()
             for stripe in stripes[lower..<upper] { sum.add(stripe.sum?.average ?? .white) }
             return sum.average?.rgb8 ?? .white
+        }
+    }
+}
+
+extension StripeGeometry {
+    /// Screen-preview profiles matching `previewColors`: each pixel averages the
+    /// profiles of the stripes it covers. Empty when stripes have no profiles.
+    public static func previewProfiles(_ stripes: [Stripe], pixels: Int, orientation: Orientation) -> [[RGB8]] {
+        func sum(_ stripe: Stripe) -> ProfileSum? { orientation == .landscape ? stripe.rows : stripe.columns }
+        guard !stripes.isEmpty, stripes.allSatisfy({ sum($0) != nil }) else { return [] }
+        guard stripes.count > pixels, pixels > 0 else { return stripes.map { sum($0)?.average ?? [] } }
+        return (0..<pixels).map { p in
+            let lower = p * stripes.count / pixels
+            let upper = max(lower + 1, (p + 1) * stripes.count / pixels)
+            var total = ProfileSum(length: sum(stripes[lower])!.r.count)
+            for stripe in stripes[lower..<upper] {
+                // Weight each stripe equally, like previewColors.
+                if let average = sum(stripe)?.average { total.add(average) }
+            }
+            return total.average ?? []
         }
     }
 }

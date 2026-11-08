@@ -94,6 +94,9 @@ final class Database: @unchecked Sendable {
             updated_at REAL NOT NULL
         );
         """)
+        // Squeezed-photo profiles (added later): 64 RGB triples each, base64.
+        try? execute("ALTER TABLE photo_analysis ADD COLUMN profile_rows TEXT")
+        try? execute("ALTER TABLE photo_analysis ADD COLUMN profile_columns TEXT")
     }
 
     // MARK: - Primitive helpers
@@ -333,7 +336,7 @@ extension Database {
     func analysis(assetID: String, revision: String, version: Int = Versions.analysis) throws -> PhotoAnalysis? {
         var result: PhotoAnalysis?
         try run("""
-        SELECT r, g, b, exclusion, confidence, difference_hash, content_hash FROM photo_analysis
+        SELECT r, g, b, exclusion, confidence, difference_hash, content_hash, profile_rows, profile_columns FROM photo_analysis
         WHERE asset_id = ? AND revision = ? AND analysis_version = ?
         """, [.text(assetID), .text(revision), .int(Int64(version))]) { s in
             result = PhotoAnalysis(
@@ -341,7 +344,9 @@ extension Database {
                 color: LinearRGB(r: s.double(0), g: s.double(1), b: s.double(2)),
                 exclusion: s.text(3).flatMap(ExclusionReason.init(rawValue:)),
                 confidence: s.double(4),
-                fingerprint: ImageFingerprint(differenceHash: UInt64(bitPattern: s.int64(5)), contentHash: UInt64(bitPattern: s.int64(6)))
+                fingerprint: ImageFingerprint(differenceHash: UInt64(bitPattern: s.int64(5)), contentHash: UInt64(bitPattern: s.int64(6))),
+                rows: s.text(7).flatMap(Self.decodeProfile),
+                columns: s.text(8).flatMap(Self.decodeProfile)
             )
         }
         return result
@@ -349,14 +354,25 @@ extension Database {
 
     func save(_ analysis: PhotoAnalysis) throws {
         try run("""
-        INSERT OR REPLACE INTO photo_analysis (asset_id, revision, analysis_version, r, g, b, exclusion, confidence, difference_hash, content_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO photo_analysis (asset_id, revision, analysis_version, r, g, b, exclusion, confidence, difference_hash, content_hash, profile_rows, profile_columns)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [
             .text(analysis.assetID), .text(analysis.revision), .int(Int64(analysis.analysisVersion)),
             .double(analysis.color.r), .double(analysis.color.g), .double(analysis.color.b),
             .optionalText(analysis.exclusion?.rawValue), .double(analysis.confidence),
             .int(Int64(bitPattern: analysis.fingerprint.differenceHash)), .int(Int64(bitPattern: analysis.fingerprint.contentHash)),
+            .optionalText(analysis.rows.map(Self.encodeProfile)), .optionalText(analysis.columns.map(Self.encodeProfile)),
         ])
+    }
+
+    private static func encodeProfile(_ profile: [RGB8]) -> String {
+        Data(profile.flatMap { [$0.r, $0.g, $0.b] }).base64EncodedString()
+    }
+
+    private static func decodeProfile(_ text: String) -> [RGB8]? {
+        guard let data = Data(base64Encoded: text), data.count % 3 == 0, !data.isEmpty else { return nil }
+        let bytes = [UInt8](data)
+        return stride(from: 0, to: bytes.count, by: 3).map { RGB8(r: bytes[$0], g: bytes[$0 + 1], b: bytes[$0 + 2]) }
     }
 
     /// Manifest items joined with their cached analyses, for building reports.

@@ -83,12 +83,20 @@ public struct GenerationReport: Sendable {
                     assetID: item.entry.assetID,
                     captureDate: item.entry.captureDate,
                     day: item.entry.day,
-                    color: item.analysis!.color
+                    color: item.analysis!.color,
+                    rows: item.analysis!.rows,
+                    columns: item.analysis!.columns
                 ))
             }
         }
         counts.included = included.count
         return GenerationReport(snapshot: snapshot, included: included, counts: counts, duplicateGroups: duplicates.groupOf)
+    }
+
+    /// True when every included photo has a squeezed profile (analyses from
+    /// before profiles existed don't), so the Squeezed style can be drawn.
+    public var supportsSqueezed: Bool {
+        !included.isEmpty && included.allSatisfy { $0.rows != nil && $0.columns != nil }
     }
 
     /// Stripes for any mode/size/orientation, recomputed from per-photo colors.

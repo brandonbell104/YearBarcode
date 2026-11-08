@@ -47,6 +47,7 @@ struct YearsView: View {
 
                     VStack(alignment: .leading, spacing: 22) {
                         modeSection
+                        styleSection
                         orientationSection
                         sizeSection
                     }
@@ -115,6 +116,17 @@ struct YearsView: View {
             SectionLabel("Mode")
             PillSegmented(options: BarcodeMode.allCases.map { ($0, $0.title) }, selection: $settings.mode)
             Text(modeHelp)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var styleSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Stripe style")
+            PillSegmented(options: StripeStyle.allCases.map { ($0, $0.title) }, selection: $settings.stripeStyle)
+            Text(settings.stripeStyle.helpText)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

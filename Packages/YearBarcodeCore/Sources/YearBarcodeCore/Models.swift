@@ -3,7 +3,7 @@ import Foundation
 public enum Versions {
     /// Bump when color sampling or filter rules change; cached analyses with a
     /// different version are recomputed.
-    public static let analysis = 1
+    public static let analysis = 2
     /// Bump when grouping or poster geometry changes.
     public static let layout = 1
 }
@@ -84,21 +84,24 @@ public struct ArtworkSettings: Codable, Hashable, Sendable {
     public var orientation: Orientation
     /// Poster background (the border around the barcode).
     public var background: RGB8
+    public var stripeStyle: StripeStyle
 
     public init(
         mode: BarcodeMode = .everyPhoto,
         printSize: PrintSize = .size24x36,
         orientation: Orientation = .landscape,
-        background: RGB8 = .white
+        background: RGB8 = .white,
+        stripeStyle: StripeStyle = .solid
     ) {
         self.mode = mode
         self.printSize = printSize
         self.orientation = orientation
         self.background = background
+        self.stripeStyle = stripeStyle
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, printSize, orientation, background
+        case mode, printSize, orientation, background, stripeStyle
     }
 
     /// Settings saved before `background` existed decode with a white background.
@@ -108,6 +111,7 @@ public struct ArtworkSettings: Codable, Hashable, Sendable {
         printSize = try c.decode(PrintSize.self, forKey: .printSize)
         orientation = try c.decode(Orientation.self, forKey: .orientation)
         background = try c.decodeIfPresent(RGB8.self, forKey: .background) ?? .white
+        stripeStyle = try c.decodeIfPresent(StripeStyle.self, forKey: .stripeStyle) ?? .solid
     }
 
     public static let `default` = ArtworkSettings()
@@ -166,6 +170,10 @@ public struct PhotoAnalysis: Codable, Hashable, Sendable {
     public var exclusion: ExclusionReason?
     public var confidence: Double
     public var fingerprint: ImageFingerprint
+    /// The photo squeezed to a line: colors top to bottom and left to right
+    /// (`ColorProfile.length` each). Nil for analyses made before profiles existed.
+    public var rows: [RGB8]?
+    public var columns: [RGB8]?
 
     public init(
         assetID: String,
@@ -174,8 +182,12 @@ public struct PhotoAnalysis: Codable, Hashable, Sendable {
         color: LinearRGB,
         exclusion: ExclusionReason?,
         confidence: Double,
-        fingerprint: ImageFingerprint
+        fingerprint: ImageFingerprint,
+        rows: [RGB8]? = nil,
+        columns: [RGB8]? = nil
     ) {
+        self.rows = rows
+        self.columns = columns
         self.assetID = assetID
         self.revision = revision
         self.analysisVersion = analysisVersion

@@ -26,11 +26,22 @@ public struct ScanlineRenderer: Sendable {
     public let stripeColors: [RGB8]
     public let overlays: [RasterOverlay]
     public let background: RGB8
+    /// Optional squeezed-photo profile per stripe, running along the stripe
+    /// (top to bottom in landscape, left to right in portrait). Empty or a
+    /// stripe's empty profile means that stripe is drawn solid.
+    public let stripeProfiles: [[RGB8]]
 
-    public init(layout: PosterLayout, stripeColors: [RGB8], overlays: [RasterOverlay], background: RGB8 = .white) {
+    public init(
+        layout: PosterLayout,
+        stripeColors: [RGB8],
+        overlays: [RasterOverlay],
+        background: RGB8 = .white,
+        stripeProfiles: [[RGB8]] = []
+    ) {
         self.layout = layout
         self.stripeColors = stripeColors
         self.background = background
+        self.stripeProfiles = stripeProfiles.count == stripeColors.count ? stripeProfiles : []
         self.overlays = overlays.filter {
             PixelRect(x: 0, y: 0, width: layout.canvas.width, height: layout.canvas.height).contains($0.rect)
         }
@@ -63,6 +74,15 @@ public struct ScanlineRenderer: Sendable {
         for y in 0..<height {
             if y >= bar.y && y < bar.maxY && !stripeColors.isEmpty {
                 switch layout.orientation {
+                case .landscape where !stripeProfiles.isEmpty:
+                    // Each stripe takes its color at this height from its profile.
+                    row = backgroundRow
+                    let t = (Double(y - bar.y) + 0.5) / Double(bar.height)
+                    for i in stripeColors.indices {
+                        let profile = stripeProfiles[i]
+                        let color = profile.isEmpty ? stripeColors[i] : ColorProfile.sample(profile, at: t)
+                        fill(&row, from: bar.x + bounds[i], to: bar.x + bounds[i + 1], color: color)
+                    }
                 case .landscape:
                     row = landscapeBarcodeRow
                 case .portrait:
@@ -71,7 +91,18 @@ public struct ScanlineRenderer: Sendable {
                         portraitStripe += 1
                     }
                     row = backgroundRow
-                    fill(&row, from: bar.x, to: bar.maxX, color: stripeColors[portraitStripe])
+                    let profile = stripeProfiles.isEmpty ? [] : stripeProfiles[portraitStripe]
+                    if profile.isEmpty {
+                        fill(&row, from: bar.x, to: bar.maxX, color: stripeColors[portraitStripe])
+                    } else {
+                        // Along the row, the stripe's colors run left to right.
+                        for x in bar.x..<bar.maxX {
+                            let color = ColorProfile.sample(profile, at: (Double(x - bar.x) + 0.5) / Double(bar.width))
+                            row[x * 3] = color.r
+                            row[x * 3 + 1] = color.g
+                            row[x * 3 + 2] = color.b
+                        }
+                    }
                 }
             } else {
                 row = backgroundRow

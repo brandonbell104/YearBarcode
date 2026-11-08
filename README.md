@@ -66,6 +66,7 @@ CI (`.github/workflows/ci.yml`) runs the core tests on Linux and macOS and build
 | Every Photo: one stripe per photo, or exactly K groups, never across days, capped proportional allocation, largest remainders with chronological ties | `Grouper.everyPhoto`, `Grouper.allocate`, `Grouper.partition` |
 | Every Day: one equal stripe per day that has photos (changed from the spec: empty days are skipped, not drawn white) | `Grouper.everyDay` |
 | Linear-light averaging with sums and counts | `ColorSum`, `ColorAverager` |
+| Stripe style: Solid (average color) or Squeezed (each photo squeezed into its stripe like a movie barcode, from a 64-band top-to-bottom / left-to-right profile, averaged in linear light per group) | `StripeStyle`, `ColorProfile`, `ProfileSum`, `ScanlineRenderer.stripeProfiles` |
 | Barcode 90% × 75%, K = floor(length / 2), stripes ≥ 2 px | `PosterLayout`, `StripeGeometry.boundaries` |
 | Layout editor: photos (up to 20, uncropped) and text blocks (year, count, custom) as reorderable layers that can be moved, resized, rotated and restyled anywhere, cropped at the poster edge; the watermark stays on top (changed from the spec's fixed labels and 4 slots) | `PosterDesign`, `TextLayer`, `BorderPlacement`, `LayoutEditorView`, `ArtworkRenderer.layerOverlays` |
 | Change mode/size/orientation from cached analysis | `GenerationReport.barcode(for:)`, `ArtworkSession.update` |

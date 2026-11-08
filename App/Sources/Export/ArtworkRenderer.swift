@@ -35,10 +35,13 @@ enum ArtworkRenderer {
         let canvas = previewCanvas(for: input.settings, longEdge: longEdge)
         let layout = PosterLayout(canvas: canvas, orientation: input.settings.orientation)
         let colors = StripeGeometry.previewColors(input.barcode.stripes, pixels: layout.barcodeLength)
+        let profiles = input.settings.stripeStyle == .squeezed
+            ? StripeGeometry.previewProfiles(input.barcode.stripes, pixels: layout.barcodeLength, orientation: input.settings.orientation)
+            : []
         var overlays: [RasterOverlay] = []
         if includeLayers { overlays += layerOverlays(input, layout: layout, images: borderImages) }
         overlays += watermarkOverlays(input, layout: layout)
-        let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: input.settings.background)
+        let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: input.settings.background, stripeProfiles: profiles)
         return PixelSampler.cgImage(rgb: renderer.renderImage(), width: canvas.width, height: canvas.height)
     }
 
@@ -75,8 +78,12 @@ enum ArtworkRenderer {
         images.removeAll()
         let colors = input.barcode.stripes.map(\.rgb8)
         let background = input.settings.background
+        let orientation = input.settings.orientation
+        let profiles: [[RGB8]] = input.settings.stripeStyle == .squeezed
+            ? input.barcode.stripes.map { $0.profile(for: orientation) ?? [] }
+            : []
         try await Task.detached(priority: .userInitiated) {
-            let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: background)
+            let renderer = ScanlineRenderer(layout: layout, stripeColors: colors, overlays: overlays, background: background, stripeProfiles: profiles)
             try renderer.writePNG(to: url, progress: progress)
         }.value
         return url

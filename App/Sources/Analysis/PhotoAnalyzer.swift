@@ -28,9 +28,11 @@ final class PhotoAnalyzer: @unchecked Sendable {
         let n = Self.colorSampleSize
         let sampleImage = try await library.image(for: asset, targetSize: CGSize(width: n * 2, height: n * 2), contentMode: .aspectFit)
         let sample = PixelSampler.rgbx(of: sampleImage, width: n, height: n)
-        let (color, fingerprint) = sample.withUnsafeBufferPointer { pixels in
+        // The whole photo stretched to n × n, so rows and columns span it fully.
+        let (color, fingerprint, profile) = sample.withUnsafeBufferPointer { pixels in
             (ColorAverager.averageLinear(pixels: pixels, width: n, height: n, bytesPerRow: n * 4),
-             ImageFingerprint.compute(pixels: pixels, width: n, height: n, bytesPerRow: n * 4))
+             ImageFingerprint.compute(pixels: pixels, width: n, height: n, bytesPerRow: n * 4),
+             ColorProfile.compute(pixels: pixels, width: n, height: n, bytesPerRow: n * 4))
         }
 
         var signals = FilterSignals()
@@ -51,7 +53,8 @@ final class PhotoAnalyzer: @unchecked Sendable {
         let decision = FilterPolicy.decide(signals)
         return PhotoAnalysis(
             assetID: asset.localIdentifier, revision: revision, color: color,
-            exclusion: decision.exclusion, confidence: decision.confidence, fingerprint: fingerprint
+            exclusion: decision.exclusion, confidence: decision.confidence, fingerprint: fingerprint,
+            rows: profile.rows, columns: profile.columns
         )
     }
 

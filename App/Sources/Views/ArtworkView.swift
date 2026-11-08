@@ -82,11 +82,29 @@ struct ArtworkView: View {
                             selection: binding(session, \.mode),
                             height: 36
                         )
+                        PillSegmented(
+                            options: StripeStyle.allCases.map { ($0, $0.title) },
+                            selection: binding(session, \.stripeStyle),
+                            height: 36
+                        )
+                        .disabled(!report.supportsSqueezed && settings.stripeStyle == .solid)
+                        .opacity(!report.supportsSqueezed && settings.stripeStyle == .solid ? 0.5 : 1)
                         ChipPicker(
                             options: PrintSize.allCases.map { ($0, "\($0.shortInches) × \($0.longInches)") },
                             selection: binding(session, \.printSize),
                             height: 40
                         )
+                        if !report.supportsSqueezed {
+                            Text("Squeezed stripes need photo details this poster was made without. Generate \(String(report.snapshot.year)) again to use them.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.tertiaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if settings.stripeStyle == .squeezed {
+                            Text(StripeStyle.squeezed.helpText)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         if settings.mode == .everyPhoto {
                             Text(ArtworkText.capacityHint(
                                 year: report.snapshot.year,
