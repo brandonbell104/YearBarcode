@@ -9,6 +9,8 @@ struct YearBarcodeApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .preferredColorScheme(.dark)
+                .tint(Theme.accent)
                 .task { await model.onLaunch() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.onForeground() } }
@@ -28,6 +30,7 @@ struct RootView: View {
             } else {
                 NavigationStack(path: $model.path) {
                     YearsView()
+                        .toolbarBackground(Theme.background, for: .navigationBar)
                         .navigationDestination(for: Route.self) { route in
                             switch route {
                             case .progress(let id): JobProgressView(generationID: id)

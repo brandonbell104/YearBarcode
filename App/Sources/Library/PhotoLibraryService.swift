@@ -135,6 +135,38 @@ final class PhotoLibraryService: @unchecked Sendable {
         }
     }
 
+    /// A rough preview of a year's colors: tiny on-device thumbnails of photos
+    /// spread evenly through the year, oldest first. Never downloads from iCloud.
+    func quickColors(year: Int, samples: Int, timeZone: TimeZone) async -> [RGB8] {
+        let calendar = YearCalendar(timeZone: timeZone)
+        let options = stillImageOptions(predicate: NSPredicate(
+            format: "creationDate >= %@ AND creationDate < %@",
+            calendar.startOfYear(year) as NSDate, calendar.startOfYear(year + 1) as NSDate
+        ))
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        let assets = PHAsset.fetchAssets(with: options)
+        guard assets.count > 0 else { return [] }
+        let count = min(samples, assets.count)
+        var colors: [RGB8] = []
+        for i in 0..<count {
+            let asset = assets.object(at: i * assets.count / count)
+            let request = PHImageRequestOptions()
+            request.deliveryMode = .fastFormat
+            request.resizeMode = .fast
+            request.isNetworkAccessAllowed = false
+            let image: UIImage? = await withCheckedContinuation { continuation in
+                imageManager.requestImage(for: asset, targetSize: CGSize(width: 16, height: 16), contentMode: .aspectFill, options: request) { image, _ in
+                    continuation.resume(returning: image)
+                }
+            }
+            guard let image else { continue }
+            let pixels = PixelSampler.rgbx(of: image, width: 8, height: 8)
+            let color = pixels.withUnsafeBufferPointer { ColorAverager.averageLinear(pixels: $0, width: 8, height: 8, bytesPerRow: 32) }
+            colors.append(color.rgb8)
+        }
+        return colors
+    }
+
     /// Quick, single-callback thumbnail for pickers and lists.
     func thumbnail(for asset: PHAsset, side: CGFloat) async -> UIImage? {
         let options = PHImageRequestOptions()

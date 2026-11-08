@@ -27,6 +27,10 @@ final class AppModel {
     var isLoadingYears = false
     var generations: [GenerationRecord] = []
     var progress: [UUID: JobProgress] = [:]
+    /// Colors of photos analyzed so far in a running job (for the live barcode).
+    var liveColors: [UUID: [RGB8]] = [:]
+    /// Quick color previews for the year cards, from a few on-device thumbnails.
+    var yearPreviews: [Int: [RGB8]] = [:]
     var path: [Route] = []
     var alert: String?
 
@@ -77,6 +81,14 @@ final class AppModel {
         isLoadingYears = false
     }
 
+    /// Builds a year card's preview once, from ~48 photos spread through the year.
+    func loadYearPreview(_ year: Int) async {
+        guard yearPreviews[year] == nil, authorization.access != nil else { return }
+        yearPreviews[year] = []
+        let library = self.library
+        yearPreviews[year] = await library.quickColors(year: year, samples: 48, timeZone: .current)
+    }
+
     func refreshGenerations() {
         generations = (try? database.generations()) ?? []
     }
@@ -89,6 +101,7 @@ final class AppModel {
             let snapshot = try await engine.createGeneration(year: year, settings: settings, access: access)
             refreshGenerations()
             progress[snapshot.id] = JobProgress(phase: .analyzing, processed: 0, total: snapshot.entries.count, status: .analyzing)
+            liveColors[snapshot.id] = []
             path.append(.progress(snapshot.id))
             runner.start(snapshot.id)
         } catch SnapshotError.futureYear {
@@ -130,6 +143,7 @@ final class AppModel {
 
     private func handle(_ update: JobProgress, for id: UUID) {
         progress[id] = update
+        if !update.newColors.isEmpty { liveColors[id, default: []] += update.newColors }
         if update.status != .analyzing {
             refreshGenerations()
             // Results changed; the next visit rebuilds from the database.

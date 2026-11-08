@@ -103,7 +103,13 @@ actor GenerationEngine {
                 }
                 index += batch.count
                 processed += batch.count
-                progress(JobProgress(phase: .analyzing, processed: processed, total: total, status: .analyzing))
+                let colors = updates
+                    .sorted { $0.position < $1.position }
+                    .compactMap { update -> RGB8? in
+                        guard let analysis = update.analysis, analysis.exclusion == nil else { return nil }
+                        return analysis.color.rgb8
+                    }
+                progress(JobProgress(phase: .analyzing, processed: processed, total: total, status: .analyzing, newColors: colors))
             }
 
             try database.setStatus(.finished, for: id)

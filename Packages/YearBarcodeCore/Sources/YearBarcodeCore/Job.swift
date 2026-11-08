@@ -42,12 +42,16 @@ public struct JobProgress: Sendable, Equatable {
     public var processed: Int
     public var total: Int
     public var status: JobStatus
+    /// Colors of photos that were just analyzed and kept, in capture order,
+    /// so the progress screen can paint the barcode as it fills in.
+    public var newColors: [RGB8]
 
-    public init(phase: JobPhase, processed: Int, total: Int, status: JobStatus) {
+    public init(phase: JobPhase, processed: Int, total: Int, status: JobStatus, newColors: [RGB8] = []) {
         self.phase = phase
         self.processed = processed
         self.total = total
         self.status = status
+        self.newColors = newColors
     }
 
     public var fraction: Double { total == 0 ? 1 : Double(processed) / Double(total) }

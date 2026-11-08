@@ -44,12 +44,13 @@ struct LayoutEditorView: View {
                     poster(in: geometry.size)
                 }
                 .clipped()
-                .background(Color(.secondarySystemBackground))
+                .background(Theme.posterWell)
 
                 layerStrip
                 ScrollView { inspector.padding(.horizontal) }
                     .frame(maxHeight: 230)
             }
+            .background(Theme.background.ignoresSafeArea())
             .navigationTitle("Edit Layout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
