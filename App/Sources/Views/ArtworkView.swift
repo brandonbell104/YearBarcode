@@ -6,6 +6,7 @@ struct ArtworkView: View {
     let generationID: UUID
     @State private var session: ArtworkSession?
     @State private var showDetails = false
+    @State private var viewingFullScreen = false
 
     var body: some View {
         Group {
@@ -24,6 +25,9 @@ struct ArtworkView: View {
         }
         .onChange(of: model.purchases.isUnlocked) {
             Task { await session?.rebuild() }
+        }
+        .fullScreenCover(isPresented: $viewingFullScreen) {
+            if let session { PosterViewer(session: session) }
         }
     }
 
@@ -49,6 +53,18 @@ struct ArtworkView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     PosterWell(image: session.preview, settings: settings)
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(Theme.primaryText)
+                                .frame(width: 32, height: 32)
+                                .background(.ultraThinMaterial, in: Circle())
+                                .padding(10)
+                                .accessibilityHidden(true)
+                        }
+                        .onTapGesture { viewingFullScreen = true }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Opens the poster full screen")
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
 
