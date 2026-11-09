@@ -105,12 +105,6 @@ struct ArtworkView: View {
                         )
                         .disabled(!report.supportsSqueezed && settings.stripeStyle == .solid)
                         .opacity(!report.supportsSqueezed && settings.stripeStyle == .solid ? 0.5 : 1)
-                        SectionLabel("Size", trailing: sizeDetail(settings)).padding(.top, 4)
-                        ChipPicker(
-                            options: SizeChoice.all.map { ($0, $0.title) },
-                            selection: sizeBinding(session),
-                            height: 40
-                        )
                         if !report.supportsSqueezed {
                             Text("Squeezed stripes need photo details this poster was made without. Generate \(report.snapshot.title) again to use them.")
                                 .font(.system(size: 13))
@@ -262,35 +256,6 @@ struct ArtworkView: View {
             Image(systemName: icon).foregroundStyle(Theme.accent)
             Text(text).font(.system(size: 14)).foregroundStyle(Theme.bodyText)
         }
-    }
-
-    private func sizeDetail(_ settings: ArtworkSettings) -> String {
-        let canvas = settings.canvas
-        return settings.wallpaper == nil
-            ? "inches · 300 ppi"
-            : "This iPhone · \(canvas.width) × \(canvas.height)"
-    }
-
-    /// Print sizes plus a wallpaper sized to this iPhone's screen.
-    private func sizeBinding(_ session: ArtworkSession) -> Binding<SizeChoice> {
-        Binding(
-            get: {
-                let settings = session.artwork.settings
-                return settings.wallpaper == nil ? .print(settings.printSize) : .wallpaper
-            },
-            set: { choice in
-                var updated = session.artwork.settings
-                switch choice {
-                case .print(let size):
-                    updated.printSize = size
-                    updated.wallpaper = nil
-                case .wallpaper:
-                    updated.wallpaper = DeviceScreen.wallpaperSize
-                    updated.orientation = .portrait
-                }
-                Task { await session.update(updated) }
-            }
-        )
     }
 
     private func binding<T>(_ session: ArtworkSession, _ keyPath: WritableKeyPath<ArtworkSettings, T>) -> Binding<T> {

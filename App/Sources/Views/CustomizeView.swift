@@ -60,6 +60,17 @@ struct CustomizeView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
 
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel("Size", trailing: sizeDetail(settings)).padding(.horizontal, 8)
+                        ChipPicker(
+                            options: SizeChoice.all.map { ($0, $0.title) },
+                            selection: sizeBinding(session),
+                            height: 40
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+
                     photosSection(session, design: design)
                         .padding(.horizontal, 16)
                         .padding(.top, 20)
@@ -337,6 +348,35 @@ struct CustomizeView: View {
             }
             .padding(.horizontal, 4)
         }
+    }
+
+    private func sizeDetail(_ settings: ArtworkSettings) -> String {
+        let canvas = settings.canvas
+        return settings.wallpaper == nil
+            ? "inches · 300 ppi"
+            : "This iPhone · \(canvas.width) × \(canvas.height)"
+    }
+
+    /// Print sizes plus a wallpaper sized to this iPhone's screen.
+    private func sizeBinding(_ session: ArtworkSession) -> Binding<SizeChoice> {
+        Binding(
+            get: {
+                let settings = session.artwork.settings
+                return settings.wallpaper == nil ? .print(settings.printSize) : .wallpaper
+            },
+            set: { choice in
+                var updated = session.artwork.settings
+                switch choice {
+                case .print(let size):
+                    updated.printSize = size
+                    updated.wallpaper = nil
+                case .wallpaper:
+                    updated.wallpaper = DeviceScreen.wallpaperSize
+                    updated.orientation = .portrait
+                }
+                Task { await session.update(updated) }
+            }
+        )
     }
 
     private func layoutSummary(_ design: PosterDesign) -> String {
