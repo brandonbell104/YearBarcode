@@ -13,7 +13,9 @@ struct PosterViewer: View {
     @State private var baseScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var baseOffset: CGSize = .zero
-    @State private var rotated = false
+    /// Degrees the poster is turned: follows the phone's physical orientation
+    /// (the app itself stays portrait), or the rotate button.
+    @State private var turn: Double = 0
 
     private static let maxScale: CGFloat = 8
 
@@ -23,6 +25,7 @@ struct PosterViewer: View {
         GeometryReader { geometry in
             let aspect = CGFloat(canvas.width) / CGFloat(canvas.height)
             // Rotating swaps which way the poster has to fit.
+            let rotated = Int(turn.magnitude) % 180 == 90
             let fitted = fit(aspect: rotated ? 1 / aspect : aspect, in: geometry.size)
             let size = rotated ? CGSize(width: fitted.height, height: fitted.width) : fitted
             ZStack {
@@ -37,7 +40,7 @@ struct PosterViewer: View {
                     }
                 }
                 .frame(width: size.width, height: size.height)
-                .rotationEffect(.degrees(rotated ? 90 : 0))
+                .rotationEffect(.degrees(turn))
                 .scaleEffect(scale)
                 .offset(offset)
                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
@@ -66,6 +69,14 @@ struct PosterViewer: View {
         .overlay(alignment: .top) { toolbar }
         .statusBarHidden()
         .task { await renderDetailed() }
+        .onAppear {
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            follow(UIDevice.current.orientation, animated: false)
+        }
+        .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications() }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            follow(UIDevice.current.orientation, animated: true)
+        }
     }
 
     private var toolbar: some View {
@@ -84,7 +95,7 @@ struct PosterViewer: View {
             }
             Button {
                 withAnimation(.snappy) {
-                    rotated.toggle()
+                    turn = Int(turn.magnitude) % 180 == 90 ? 0 : 90
                     reset()
                 }
             } label: {
@@ -134,6 +145,26 @@ struct PosterViewer: View {
             width: min(max(proposed.width, -maxX), maxX),
             height: min(max(proposed.height, -maxY), maxY)
         )
+    }
+
+    /// Turns the poster to match how the phone is held. Face up / face down
+    /// and unknown keep the current turn.
+    private func follow(_ orientation: UIDeviceOrientation, animated: Bool) {
+        let target: Double
+        switch orientation {
+        case .portrait: target = 0
+        case .landscapeLeft: target = 90      // home side on the right
+        case .landscapeRight: target = -90
+        case .portraitUpsideDown: target = 180
+        default: return
+        }
+        guard target != turn else { return }
+        if animated {
+            withAnimation(.snappy) { turn = target; reset() }
+        } else {
+            turn = target
+            reset()
+        }
     }
 
     private func reset() {

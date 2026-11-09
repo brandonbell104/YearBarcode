@@ -67,6 +67,19 @@ struct CustomizeView: View {
                             selection: sizeBinding(session),
                             height: 40
                         )
+                        SectionLabel("Orientation").padding(.horizontal, 8).padding(.top, 8)
+                        PillSegmented(
+                            options: Orientation.allCases.map { ($0, $0.title) },
+                            selection: Binding(
+                                get: { settings.orientation },
+                                set: { value in
+                                    var updated = settings
+                                    updated.orientation = value
+                                    Task { await session.update(updated) }
+                                }
+                            ),
+                            height: 36
+                        )
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 20)
