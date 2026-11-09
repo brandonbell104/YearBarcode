@@ -9,6 +9,7 @@ struct CustomizeView: View {
     @State private var editing = false
     @State private var showPhotoPicker = false
     @State private var viewingFullScreen = false
+    @State private var showingWall = false
 
     var body: some View {
         Group {
@@ -30,6 +31,9 @@ struct CustomizeView: View {
         }
         .fullScreenCover(isPresented: $viewingFullScreen) {
             if let session { PosterViewer(session: session) }
+        }
+        .sheet(isPresented: $showingWall) {
+            if let session { WallPreviewView(session: session) }
         }
     }
 
@@ -59,6 +63,17 @@ struct CustomizeView: View {
                         .accessibilityHint("Opens the poster full screen")
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
+
+                    Button { showingWall = true } label: {
+                        Label("See it on a wall", systemImage: "sofa")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.primaryText)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
                     VStack(alignment: .leading, spacing: 8) {
                         SectionLabel("Size", trailing: sizeDetail(settings)).padding(.horizontal, 8)
