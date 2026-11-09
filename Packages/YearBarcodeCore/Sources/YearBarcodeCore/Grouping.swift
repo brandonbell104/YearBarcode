@@ -84,7 +84,23 @@ public enum Grouper {
             let stripes = everyPhoto(sorted, capacity: capacity)
             return BarcodeData(stripes: stripes, includedPhotoCount: sorted.count, groupedToFit: sorted.count > capacity)
         case .everyDay:
-            return BarcodeData(stripes: everyDay(sorted), includedPhotoCount: sorted.count, groupedToFit: false)
+            var stripes = everyDay(sorted)
+            var grouped = false
+            if stripes.count > capacity {
+                // More days than fit: combine neighboring days evenly.
+                let days = stripes
+                stripes = partition(count: days.count, groups: capacity).map { range in
+                    var merged = Stripe(sum: ColorSum(), rows: days[range.lowerBound].rows.map { ProfileSum(length: $0.r.count) }, columns: days[range.lowerBound].columns.map { ProfileSum(length: $0.r.count) })
+                    for day in days[range] {
+                        if let sum = day.sum { merged.sum?.add(sum) }
+                        if let rows = day.rows { merged.rows?.add(rows) } else { merged.rows = nil }
+                        if let columns = day.columns { merged.columns?.add(columns) } else { merged.columns = nil }
+                    }
+                    return merged
+                }
+                grouped = true
+            }
+            return BarcodeData(stripes: stripes, includedPhotoCount: sorted.count, groupedToFit: grouped)
         }
     }
 
@@ -101,6 +117,11 @@ public enum Grouper {
             } else {
                 days.append([photo])
             }
+        }
+        guard days.count <= capacity else {
+            // A long custom timeline on a small canvas: more photo days than
+            // stripes. Keep order and split evenly, letting groups span days.
+            return partition(count: sorted.count, groups: capacity).map { Stripe(photos: sorted[$0]) }
         }
         let allocation = allocate(dayCounts: days.map(\.count), capacity: capacity)
         var stripes: [Stripe] = []

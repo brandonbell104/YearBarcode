@@ -29,6 +29,10 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
     public var entries: [ManifestEntry]
     public var missingDateCount: Int
     public var invalidDateCount: Int
+    /// A custom timeline: start of the first day and start of the last day
+    /// (inclusive). Nil for a whole calendar year.
+    public var rangeStart: Date?
+    public var rangeEnd: Date?
 
     public init(
         id: UUID,
@@ -41,8 +45,12 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
         layoutVersion: Int,
         entries: [ManifestEntry],
         missingDateCount: Int,
-        invalidDateCount: Int
+        invalidDateCount: Int,
+        rangeStart: Date? = nil,
+        rangeEnd: Date? = nil
     ) {
+        self.rangeStart = rangeStart
+        self.rangeEnd = rangeEnd
         self.id = id
         self.year = year
         self.cutoff = cutoff
@@ -58,10 +66,38 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
 
     public var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? TimeZone(identifier: "UTC")! }
     public var calendar: YearCalendar { YearCalendar(timeZone: timeZone) }
+
+    /// "2025", or for a custom timeline "Mar 3 – Jun 8, 2025".
+    public var title: String {
+        TimelineTitle.make(year: year, start: rangeStart, end: rangeEnd, timeZone: timeZone)
+    }
+}
+
+/// Display names for what a poster covers.
+public enum TimelineTitle {
+    public static func make(year: Int, start: Date?, end: Date?, timeZone: TimeZone, locale: Locale = .current) -> String {
+        guard let start, let end else { return String(year) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        func format(_ template: String, _ date: Date) -> String {
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.timeZone = timeZone
+            formatter.setLocalizedDateFormatFromTemplate(template)
+            return formatter.string(from: date)
+        }
+        let sameYear = calendar.component(.year, from: start) == calendar.component(.year, from: end)
+        if calendar.isDate(start, inSameDayAs: end) { return format("MMMdyyyy", start) }
+        return sameYear
+            ? "\(format("MMMd", start)) – \(format("MMMdyyyy", end))"
+            : "\(format("MMMdyyyy", start)) – \(format("MMMdyyyy", end))"
+    }
 }
 
 public enum SnapshotError: Error, Equatable, Sendable {
     case futureYear(Int)
+    /// The custom timeline ends before it starts, or starts after today.
+    case invalidRange
 }
 
 public enum SnapshotBuilder {
@@ -111,9 +147,49 @@ public enum SnapshotBuilder {
     ) throws -> GenerationSnapshot where S.Element == LibraryAssetDescriptor {
         let calendar = YearCalendar(timeZone: timeZone)
         guard year <= calendar.year(of: cutoff) else { throw SnapshotError.futureYear(year) }
+        return collect(
+            id: id, year: year, start: calendar.startOfYear(year), end: calendar.startOfYear(year + 1),
+            range: nil, cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: assets
+        )
+    }
 
-        let start = calendar.startOfYear(year)
-        let end = calendar.startOfYear(year + 1)
+    /// A custom timeline: every photo captured from the start of `first`'s day
+    /// through the end of `last`'s day (and never after `cutoff`).
+    public static func build<S: Sequence>(
+        id: UUID = UUID(),
+        from first: Date,
+        through last: Date,
+        cutoff: Date,
+        timeZone: TimeZone,
+        settings: ArtworkSettings,
+        access: LibraryAccess,
+        assets: S
+    ) throws -> GenerationSnapshot where S.Element == LibraryAssetDescriptor {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let start = calendar.startOfDay(for: first)
+        let lastDay = calendar.startOfDay(for: last)
+        guard lastDay >= start, start <= cutoff,
+              let end = calendar.date(byAdding: .day, value: 1, to: lastDay) else { throw SnapshotError.invalidRange }
+        return collect(
+            id: id, year: calendar.component(.year, from: start), start: start, end: end,
+            range: (start, lastDay), cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: assets
+        )
+    }
+
+    private static func collect<S: Sequence>(
+        id: UUID,
+        year: Int,
+        start: Date,
+        end: Date,
+        range: (Date, Date)?,
+        cutoff: Date,
+        timeZone: TimeZone,
+        settings: ArtworkSettings,
+        access: LibraryAccess,
+        assets: S
+    ) -> GenerationSnapshot where S.Element == LibraryAssetDescriptor {
+        let calendar = YearCalendar(timeZone: timeZone)
         var entries: [ManifestEntry] = []
         var seen = Set<String>()
         var missing = 0
@@ -151,7 +227,9 @@ public enum SnapshotBuilder {
             layoutVersion: Versions.layout,
             entries: entries,
             missingDateCount: missing,
-            invalidDateCount: invalid
+            invalidDateCount: invalid,
+            rangeStart: range?.0,
+            rangeEnd: range?.1
         )
     }
 

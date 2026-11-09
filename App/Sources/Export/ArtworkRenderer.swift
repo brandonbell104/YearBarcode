@@ -13,7 +13,8 @@ enum BorderPhotoError: Error, LocalizedError {
 /// Everything needed to draw one artwork. Built from cached analyses; drawing
 /// never re-reads source photos except the photos placed on the poster.
 struct ArtworkInput: Sendable {
-    var year: Int
+    /// What the poster covers: "2025" or a custom timeline like "Mar 3 – Jun 8, 2025".
+    var title: String
     var settings: ArtworkSettings
     var barcode: BarcodeData
     var design: PosterDesign
@@ -71,7 +72,9 @@ enum ArtworkRenderer {
         let size = input.settings.wallpaper == nil
             ? "\(input.settings.printSize.shortInches)x\(input.settings.printSize.longInches)"
             : "wallpaper-\(input.settings.canvas.width)x\(input.settings.canvas.height)"
-        let name = "Year-Barcode-\(input.year)-\(size)-\(input.settings.orientation.rawValue).png"
+        let slug = input.title.map { $0.isLetter || $0.isNumber ? String($0) : "-" }.joined()
+            .replacingOccurrences(of: "--", with: "-")
+        let name = "Year-Barcode-\(slug)-\(size)-\(input.settings.orientation.rawValue).png"
         let url = directory.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: url)
 
@@ -122,7 +125,7 @@ enum ArtworkRenderer {
 
     /// A text block in its font, size, color and rotation.
     static func textOverlay(_ text: TextLayer, input: ArtworkInput, layout: PosterLayout) -> RasterOverlay? {
-        let string = text.displayText(year: input.year, includedPhotos: input.barcode.includedPhotoCount)
+        let string = text.displayText(title: input.title, includedPhotos: input.barcode.includedPhotoCount)
         guard !string.isEmpty else { return nil }
         let attributes = textAttributes(text, layout: layout, background: input.settings.background)
         let measured = (string as NSString).size(withAttributes: attributes)
@@ -144,7 +147,7 @@ enum ArtworkRenderer {
 
     /// Size of a text block in poster pixels (for the editor's selection box).
     static func textSize(_ text: TextLayer, input: ArtworkInput, layout: PosterLayout) -> CGSize {
-        let string = text.displayText(year: input.year, includedPhotos: input.barcode.includedPhotoCount)
+        let string = text.displayText(title: input.title, includedPhotos: input.barcode.includedPhotoCount)
         let attributes = textAttributes(text, layout: layout, background: input.settings.background)
         return ((string.isEmpty ? " " : string) as NSString).size(withAttributes: attributes)
     }

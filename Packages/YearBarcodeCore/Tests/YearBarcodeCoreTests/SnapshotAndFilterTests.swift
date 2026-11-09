@@ -238,3 +238,69 @@ final class PosterDesignTests: XCTestCase {
         }
     }
 }
+
+final class CustomTimelineTests: XCTestCase {
+    let tz = TimeZone(identifier: "America/New_York")!
+
+    private func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 12) -> Date {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = tz
+        return c.date(from: DateComponents(year: y, month: m, day: d, hour: h))!
+    }
+
+    func testRangeIncludesWholeFirstAndLastDaysAcrossYears() throws {
+        let assets = [
+            LibraryAssetDescriptor(assetID: "before", captureDate: date(2024, 12, 19, 23), revision: "r"),
+            LibraryAssetDescriptor(assetID: "first", captureDate: date(2024, 12, 20, 0), revision: "r"),
+            LibraryAssetDescriptor(assetID: "newyear", captureDate: date(2025, 1, 1, 9), revision: "r"),
+            LibraryAssetDescriptor(assetID: "last", captureDate: date(2025, 1, 5, 23), revision: "r"),
+            LibraryAssetDescriptor(assetID: "after", captureDate: date(2025, 1, 6, 0), revision: "r"),
+        ]
+        let snapshot = try SnapshotBuilder.build(
+            from: date(2024, 12, 20, 15), through: date(2025, 1, 5, 8), cutoff: date(2026, 1, 1),
+            timeZone: tz, settings: .default, access: .full, assets: assets
+        )
+        XCTAssertEqual(snapshot.entries.map(\.assetID), ["first", "newyear", "last"])
+        XCTAssertEqual(snapshot.year, 2024)
+        XCTAssertNotNil(snapshot.rangeStart)
+        XCTAssertEqual(
+            TimelineTitle.make(year: 2024, start: snapshot.rangeStart, end: snapshot.rangeEnd, timeZone: tz, locale: Locale(identifier: "en_US")),
+            "Dec 20, 2024 – Jan 5, 2025"
+        )
+        XCTAssertEqual(
+            TimelineTitle.make(year: 2025, start: date(2025, 3, 3), end: date(2025, 6, 8), timeZone: tz, locale: Locale(identifier: "en_US")),
+            "Mar 3 – Jun 8, 2025"
+        )
+        XCTAssertEqual(TimelineTitle.make(year: 2025, start: nil, end: nil, timeZone: tz), "2025")
+    }
+
+    func testInvalidRanges() {
+        XCTAssertThrowsError(try SnapshotBuilder.build(
+            from: date(2025, 5, 2), through: date(2025, 5, 1), cutoff: date(2026, 1, 1),
+            timeZone: tz, settings: .default, access: .full, assets: []
+        )) { XCTAssertEqual($0 as? SnapshotError, .invalidRange) }
+        XCTAssertThrowsError(try SnapshotBuilder.build(
+            from: date(2027, 1, 1), through: date(2027, 2, 1), cutoff: date(2026, 1, 1),
+            timeZone: tz, settings: .default, access: .full, assets: []
+        )) { XCTAssertEqual($0 as? SnapshotError, .invalidRange) }
+    }
+
+    func testMoreDaysThanStripesStillFits() {
+        let calendar = YearCalendar(timeZone: tz)
+        // 50 days with 3 photos each, but only 20 stripes available.
+        var photos: [IncludedPhoto] = []
+        for d in 0..<50 {
+            for i in 0..<3 {
+                let when = calendar.startOfYear(2025).addingTimeInterval(Double(d) * 86_400 + Double(i) * 60 + 3600)
+                photos.append(IncludedPhoto(assetID: "\(d)-\(i)", captureDate: when, day: calendar.dayKey(for: when), color: LinearRGB(r: 0.5, g: 0.5, b: 0.5)))
+            }
+        }
+        let everyPhoto = Grouper.barcode(photos: photos, mode: .everyPhoto, capacity: 20)
+        XCTAssertEqual(everyPhoto.stripes.count, 20)
+        XCTAssertEqual(everyPhoto.stripes.reduce(0) { $0 + ($1.sum?.count ?? 0) }, 150)
+        let everyDay = Grouper.barcode(photos: photos, mode: .everyDay, capacity: 20)
+        XCTAssertEqual(everyDay.stripes.count, 20)
+        XCTAssertTrue(everyDay.groupedToFit)
+        XCTAssertEqual(everyDay.stripes.reduce(0) { $0 + ($1.sum?.count ?? 0) }, 150)
+    }
+}

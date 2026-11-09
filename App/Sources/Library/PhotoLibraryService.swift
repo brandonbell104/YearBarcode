@@ -71,8 +71,13 @@ final class PhotoLibraryService: @unchecked Sendable {
     /// accessible still image without a capture date so it can be counted.
     func descriptors(year: Int, cutoff: Date, timeZone: TimeZone) -> [LibraryAssetDescriptor] {
         let calendar = YearCalendar(timeZone: timeZone)
-        let start = calendar.startOfYear(year)
-        let end = min(calendar.startOfYear(year + 1), cutoff.addingTimeInterval(1))
+        return descriptors(from: calendar.startOfYear(year), before: calendar.startOfYear(year + 1), cutoff: cutoff)
+    }
+
+    /// Accessible still images captured in [start, end) and not after the
+    /// cutoff, plus every accessible still image without a capture date.
+    func descriptors(from start: Date, before rangeEnd: Date, cutoff: Date) -> [LibraryAssetDescriptor] {
+        let end = min(rangeEnd, cutoff.addingTimeInterval(1))
         var result: [LibraryAssetDescriptor] = []
         // One pass over all still images: PhotoKit predicates cannot reliably
         // match a nil creation date, and undated items must be counted.
@@ -82,6 +87,13 @@ final class PhotoLibraryService: @unchecked Sendable {
             result.append(LibraryAssetDescriptor(assetID: asset.localIdentifier, captureDate: date, revision: Self.revision(of: asset)))
         }
         return result
+    }
+
+    /// Photos captured in [start, end), for the custom timeline's live count.
+    func count(from start: Date, before end: Date) -> Int {
+        PHAsset.fetchAssets(with: stillImageOptions(predicate: NSPredicate(
+            format: "creationDate >= %@ AND creationDate < %@", start as NSDate, end as NSDate
+        ))).count
     }
 
     /// PhotoKit has no public revision number. Edits change adjustments,

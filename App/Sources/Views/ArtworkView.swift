@@ -32,7 +32,7 @@ struct ArtworkView: View {
         let counts = report.counts
         let settings = session.artwork.settings
         VStack(spacing: 0) {
-            NavHeader(backTitle: "Years", title: String(report.snapshot.year), onBack: { model.path.removeAll() }) {
+            NavHeader(backTitle: "Years", title: report.snapshot.rangeStart == nil ? report.snapshot.title : "Custom Timeline", onBack: { model.path.removeAll() }) {
                 Button {
                     var flipped = settings
                     flipped.orientation = settings.orientation == .landscape ? .portrait : .landscape
@@ -53,7 +53,7 @@ struct ArtworkView: View {
                         .padding(.top, 8)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(ArtworkText.title(year: report.snapshot.year, included: counts.included).replacingOccurrences(of: " - ", with: " · "))
+                        Text("\(report.snapshot.title) · \(ArtworkText.photoCount(counts.included))")
                             .font(.system(size: 24, weight: .heavy))
                             .tracking(-0.5)
                             .foregroundStyle(Theme.primaryText)
@@ -96,7 +96,7 @@ struct ArtworkView: View {
                             height: 40
                         )
                         if !report.supportsSqueezed {
-                            Text("Squeezed stripes need photo details this poster was made without. Generate \(String(report.snapshot.year)) again to use them.")
+                            Text("Squeezed stripes need photo details this poster was made without. Generate \(report.snapshot.title) again to use them.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(Theme.tertiaryText)
                                 .fixedSize(horizontal: false, vertical: true)

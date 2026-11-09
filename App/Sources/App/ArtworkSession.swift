@@ -107,13 +107,13 @@ final class ArtworkSession {
     func rebuild() async {
         guard let report else { return }
         let settings = artwork.settings
-        let year = report.snapshot.year
+        let title = report.snapshot.title
         let design = artwork.design
         let images = borderImages
         let watermark = showWatermark
         let result = await Task.detached(priority: .userInitiated) { () -> (BarcodeData, CGImage?) in
             let data = report.barcode(for: settings)
-            let input = ArtworkInput(year: year, settings: settings, barcode: data, design: design, showWatermark: watermark)
+            let input = ArtworkInput(title: title, settings: settings, barcode: data, design: design, showWatermark: watermark)
             return (data, ArtworkRenderer.preview(input, borderImages: images))
         }.value
         barcode = result.0
@@ -135,7 +135,7 @@ final class ArtworkSession {
 
     var input: ArtworkInput? {
         guard let report, let barcode else { return nil }
-        return ArtworkInput(year: report.snapshot.year, settings: artwork.settings, barcode: barcode,
+        return ArtworkInput(title: report.snapshot.title, settings: artwork.settings, barcode: barcode,
                             design: artwork.design, showWatermark: showWatermark)
     }
 

@@ -12,6 +12,13 @@ enum StopRequest: Equatable {
 /// manifest items in order, checkpointing every small batch to SQLite.
 /// Nothing runs on a schedule; a job runs only after the user taps Generate
 /// or Resume.
+/// What a poster covers: a calendar year, or a custom range of days.
+enum Timeline: Hashable, Sendable {
+    case year(Int)
+    /// First and last day, inclusive.
+    case range(Date, Date)
+}
+
 actor GenerationEngine {
     static let batchSize = 12
     static let parallelism = 3
@@ -31,13 +38,26 @@ actor GenerationEngine {
     // MARK: - Snapshot
 
     /// Saves the cutoff, time zone, settings and asset manifest at button press.
-    func createGeneration(year: Int, settings: ArtworkSettings, access: LibraryAccess) throws -> GenerationSnapshot {
+    func createGeneration(timeline: Timeline, settings: ArtworkSettings, access: LibraryAccess) throws -> GenerationSnapshot {
         let cutoff = Date()
         let timeZone = TimeZone.current
-        let descriptors = library.descriptors(year: year, cutoff: cutoff, timeZone: timeZone)
-        let snapshot = try SnapshotBuilder.build(
-            year: year, cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: descriptors
-        )
+        let snapshot: GenerationSnapshot
+        switch timeline {
+        case .year(let year):
+            let descriptors = library.descriptors(year: year, cutoff: cutoff, timeZone: timeZone)
+            snapshot = try SnapshotBuilder.build(
+                year: year, cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: descriptors
+            )
+        case .range(let first, let last):
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let start = calendar.startOfDay(for: first)
+            let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: last)) ?? start
+            let descriptors = library.descriptors(from: start, before: end, cutoff: cutoff)
+            snapshot = try SnapshotBuilder.build(
+                from: first, through: last, cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: descriptors
+            )
+        }
         try database.insert(snapshot: snapshot)
         return snapshot
     }

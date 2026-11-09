@@ -29,7 +29,7 @@ struct LayoutEditorView: View {
     private var layout: PosterLayout {
         PosterLayout(settings: session.artwork.settings)
     }
-    private var year: Int { session.report?.snapshot.year ?? 0 }
+    private var title: String { session.report?.snapshot.title ?? "" }
     private var includedPhotos: Int { session.barcode?.includedPhotoCount ?? 0 }
 
     private var selectedIndex: Int? {
@@ -129,7 +129,7 @@ struct LayoutEditorView: View {
             .position(x: frame.centerX * k, y: frame.centerY * k)
         case .text(let text):
             let position = layout.position(for: text)
-            let string = text.displayText(year: year, includedPhotos: includedPhotos)
+            let string = text.displayText(title: title, includedPhotos: includedPhotos)
             let uiFont = ArtworkRenderer.font(text.font, bold: text.bold, size: layout.fontSize(for: text) * Double(k))
             Text(string.isEmpty ? " " : string)
                 .font(Font(uiFont as CTFont))
@@ -263,7 +263,7 @@ struct LayoutEditorView: View {
                     Color(.tertiarySystemFill)
                     VStack(spacing: 2) {
                         Image(systemName: "textformat").font(.caption)
-                        Text(text.displayText(year: year, includedPhotos: includedPhotos))
+                        Text(text.displayText(title: title, includedPhotos: includedPhotos))
                             .font(.system(size: 9))
                             .lineLimit(2)
                             .multilineTextAlignment(.center)
@@ -327,7 +327,7 @@ struct LayoutEditorView: View {
     @ViewBuilder
     private func textControls(_ text: TextLayer, index: Int) -> some View {
         TextField("Text", text: Binding(
-            get: { text.displayText(year: year, includedPhotos: includedPhotos) },
+            get: { text.displayText(title: title, includedPhotos: includedPhotos) },
             set: { newValue in updateText(index) { $0.text = newValue } }
         ))
         .textFieldStyle(.roundedBorder)
@@ -357,7 +357,7 @@ struct LayoutEditorView: View {
             }
         }
         if text.role != .custom, text.text != nil {
-            Button(text.role == .year ? "Use the Year" : "Use the Photo Count") {
+            Button(text.role == .year ? "Use the Date" : "Use the Photo Count") {
                 updateText(index) { $0.text = nil }
             }
             .font(.caption)
@@ -584,7 +584,7 @@ struct LayoutEditorView: View {
     private func accessibilityName(_ layer: PosterLayer) -> String {
         switch layer {
         case .photo: return "Photo layer"
-        case .text(let text): return "Text: \(text.displayText(year: year, includedPhotos: includedPhotos))"
+        case .text(let text): return "Text: \(text.displayText(title: title, includedPhotos: includedPhotos))"
         }
     }
 

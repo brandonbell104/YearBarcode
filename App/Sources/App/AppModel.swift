@@ -84,7 +84,7 @@ final class AppModel {
 
     /// The most recent finished poster for a year, if any.
     func latestFinished(year: Int) -> GenerationRecord? {
-        generations.first { $0.year == year && $0.status == .finished }
+        generations.first { $0.year == year && $0.status == .finished && !$0.isCustomTimeline }
     }
 
     /// Loads a year card's barcode from its latest finished poster, once.
@@ -117,9 +117,13 @@ final class AppModel {
     // MARK: - Jobs
 
     func generate(year: Int, settings: ArtworkSettings) async {
+        await generate(timeline: .year(year), settings: settings)
+    }
+
+    func generate(timeline: Timeline, settings: ArtworkSettings) async {
         guard let access = authorization.access else { return }
         do {
-            let snapshot = try await engine.createGeneration(year: year, settings: settings, access: access)
+            let snapshot = try await engine.createGeneration(timeline: timeline, settings: settings, access: access)
             refreshGenerations()
             progress[snapshot.id] = JobProgress(phase: .analyzing, processed: 0, total: snapshot.entries.count, status: .analyzing)
             liveColors[snapshot.id] = []
@@ -127,6 +131,8 @@ final class AppModel {
             runner.start(snapshot.id)
         } catch SnapshotError.futureYear {
             alert = "Future years are not available."
+        } catch SnapshotError.invalidRange {
+            alert = "Choose a start date on or before the end date, and not in the future."
         } catch {
             alert = "Could not take a snapshot of your library: \(error.localizedDescription)"
         }

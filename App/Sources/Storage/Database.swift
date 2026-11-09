@@ -94,6 +94,9 @@ final class Database: @unchecked Sendable {
             updated_at REAL NOT NULL
         );
         """)
+        // Custom timelines (added later): first and last day, or NULL for a whole year.
+        try? execute("ALTER TABLE generation ADD COLUMN range_start REAL")
+        try? execute("ALTER TABLE generation ADD COLUMN range_end REAL")
         // Squeezed-photo profiles (added later): 64 RGB triples each, base64.
         try? execute("ALTER TABLE photo_analysis ADD COLUMN profile_rows TEXT")
         try? execute("ALTER TABLE photo_analysis ADD COLUMN profile_columns TEXT")
@@ -176,6 +179,9 @@ fileprivate struct Statement {
     func int(_ i: Int32) -> Int { Int(sqlite3_column_int64(handle, i)) }
     func int64(_ i: Int32) -> Int64 { sqlite3_column_int64(handle, i) }
     func double(_ i: Int32) -> Double { sqlite3_column_double(handle, i) }
+    func optionalDouble(_ i: Int32) -> Double? {
+        sqlite3_column_type(handle, i) == SQLITE_NULL ? nil : sqlite3_column_double(handle, i)
+    }
     func text(_ i: Int32) -> String? {
         guard let c = sqlite3_column_text(handle, i) else { return nil }
         return String(cString: c)
@@ -199,6 +205,17 @@ struct GenerationRecord: Identifiable, Hashable, Sendable {
     var missingDateCount: Int
     var invalidDateCount: Int
     var createdAt: Date
+    /// Custom timeline (first and last day); nil for a whole year.
+    var rangeStart: Date?
+    var rangeEnd: Date?
+
+    var isCustomTimeline: Bool { rangeStart != nil }
+
+    /// "2025", or "Mar 3 – Jun 8, 2025" for a custom timeline.
+    var title: String {
+        TimelineTitle.make(year: year, start: rangeStart, end: rangeEnd,
+                           timeZone: TimeZone(identifier: timeZoneIdentifier) ?? .current)
+    }
 }
 
 struct ArtworkRecord: Hashable, Sendable {
@@ -219,13 +236,15 @@ extension Database {
     func insert(snapshot: GenerationSnapshot) throws {
         try transaction {
             try run("""
-            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, checkpoint, missing_date_count, invalid_date_count, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
             """, [
                 .text(snapshot.id.uuidString), .int(Int64(snapshot.year)), .double(snapshot.cutoff.timeIntervalSince1970),
                 .text(snapshot.timeZoneIdentifier), .text(try json(snapshot.settings)), .text(snapshot.access.rawValue),
                 .int(Int64(snapshot.analysisVersion)), .int(Int64(snapshot.layoutVersion)), .text(JobStatus.analyzing.rawValue),
                 .int(Int64(snapshot.missingDateCount)), .int(Int64(snapshot.invalidDateCount)), .double(Date().timeIntervalSince1970),
+                snapshot.rangeStart.map { SQLValue.double($0.timeIntervalSince1970) } ?? SQLValue.null,
+                snapshot.rangeEnd.map { SQLValue.double($0.timeIntervalSince1970) } ?? SQLValue.null,
             ])
             for (position, entry) in snapshot.entries.enumerated() {
                 try run("""
@@ -266,8 +285,8 @@ extension Database {
         let now = Date().timeIntervalSince1970
         try transaction {
             try run("""
-            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at)
-            SELECT ?, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, ?
+            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end)
+            SELECT ?, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, ?, range_start, range_end
             FROM generation WHERE id = ?
             """, [.text(newID.uuidString), .double(now), .text(id.uuidString)])
             try run("""
@@ -286,7 +305,7 @@ extension Database {
         try run("DELETE FROM generation WHERE id = ?", [.text(id.uuidString)])
     }
 
-    private static let generationColumns = "id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at"
+    private static let generationColumns = "id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end"
 
     private static func generation(from s: Statement) throws -> GenerationRecord {
         GenerationRecord(
@@ -303,7 +322,9 @@ extension Database {
             checkpoint: s.int(10),
             missingDateCount: s.int(11),
             invalidDateCount: s.int(12),
-            createdAt: Date(timeIntervalSince1970: s.double(13))
+            createdAt: Date(timeIntervalSince1970: s.double(13)),
+            rangeStart: s.optionalDouble(14).map(Date.init(timeIntervalSince1970:)),
+            rangeEnd: s.optionalDouble(15).map(Date.init(timeIntervalSince1970:))
         )
     }
 
@@ -331,7 +352,8 @@ extension Database {
             id: record.id, year: record.year, cutoff: record.cutoff, timeZoneIdentifier: record.timeZoneIdentifier,
             settings: record.settings, access: record.access, analysisVersion: record.analysisVersion,
             layoutVersion: record.layoutVersion, entries: try manifest(record.id).map { $0.entry },
-            missingDateCount: record.missingDateCount, invalidDateCount: record.invalidDateCount
+            missingDateCount: record.missingDateCount, invalidDateCount: record.invalidDateCount,
+            rangeStart: record.rangeStart, rangeEnd: record.rangeEnd
         )
     }
 

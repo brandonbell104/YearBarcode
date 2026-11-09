@@ -8,6 +8,11 @@ struct YearsView: View {
     @State private var settings = ArtworkSettings.default
     @State private var isGenerating = false
     @State private var showSettings = false
+    /// Custom timeline: pick any first and last day instead of a year.
+    @State private var customSelected = false
+    @State private var rangeStart = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var rangeEnd = Date()
+    @State private var rangeCount: Int?
 
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
 
@@ -65,6 +70,7 @@ struct YearsView: View {
                     yearCards.padding(.top, 18)
 
                     VStack(alignment: .leading, spacing: 22) {
+                        if customSelected { customRangeSection }
                         styleSection
                         orientationSection
                         Text("Mode, print size, border and wallpaper can be changed after generating.")
@@ -100,6 +106,8 @@ struct YearsView: View {
     private var yearCards: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
+                CustomTimelineCard(selected: customSelected, count: customSelected ? rangeCount : nil)
+                    .onTapGesture { withAnimation(.snappy) { customSelected = true } }
                 if model.isLoadingYears && model.years.isEmpty {
                     ProgressView().tint(Theme.tertiaryText).frame(width: 148, height: 180)
                 } else if model.years.isEmpty {
@@ -115,14 +123,51 @@ struct YearsView: View {
                         colors: latest == nil ? nil : model.yearBarcodes[year],
                         generated: latest != nil,
                         tag: tag(for: year),
-                        selected: year == selectedYear
+                        selected: !customSelected && year == selectedYear
                     )
-                    .onTapGesture { selectedYear = year }
+                    .onTapGesture {
+                        withAnimation(.snappy) {
+                            customSelected = false
+                            selectedYear = year
+                        }
+                    }
                     .task(id: latest?.id) { await model.loadYearBarcode(year) }
                 }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 6)
+        }
+    }
+
+    private var customRangeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Custom timeline", trailing: rangeCount.map { ArtworkText.photoCount($0) })
+            VStack(spacing: 0) {
+                DatePicker("From", selection: $rangeStart, in: ...Date(), displayedComponents: .date)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 50)
+                Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, 14)
+                DatePicker("To", selection: $rangeEnd, in: rangeStart...Date(), displayedComponents: .date)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 50)
+            }
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(Theme.primaryText)
+            .tint(Theme.accent)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+            Text("Uses every photo taken from the start of the first day through the end of the last day.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.secondaryText)
+        }
+        .onChange(of: rangeStart) { _, start in
+            if rangeEnd < start { rangeEnd = start }
+        }
+        .task(id: [rangeStart, rangeEnd]) {
+            let library = model.library
+            let calendar = Calendar.current
+            let start = calendar.startOfDay(for: rangeStart)
+            let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: rangeEnd)) ?? start
+            rangeCount = await Task.detached { library.count(from: start, before: end) }.value
         }
     }
 
@@ -177,7 +222,27 @@ struct YearsView: View {
 
     @ViewBuilder
     private var generateButton: some View {
-        if let year = selectedYear, let latest = model.latestFinished(year: year) {
+        if customSelected {
+            Button {
+                isGenerating = true
+                Task {
+                    await model.generate(timeline: .range(rangeStart, rangeEnd), settings: settings)
+                    isGenerating = false
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    if isGenerating {
+                        ProgressView().tint(Theme.background)
+                    } else {
+                        Image(systemName: "calendar")
+                        Text("Generate Custom Timeline")
+                    }
+                }
+            }
+            .buttonStyle(.primary)
+            .disabled(isGenerating || rangeCount == 0)
+            .opacity(rangeCount == 0 ? 0.5 : 1)
+        } else if let year = selectedYear, let latest = model.latestFinished(year: year) {
             HStack(spacing: 10) {
                 Button("View \(String(year)) Poster") { model.path.append(.artwork(latest.id)) }
                     .buttonStyle(.primary)
@@ -217,6 +282,52 @@ struct YearsView: View {
 }
 
 // MARK: - Cards
+
+private struct CustomTimelineCard: View {
+    let selected: Bool
+    let count: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                Theme.control
+                VStack(spacing: 6) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                    Text("Any days")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+            }
+            .frame(height: 104)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Custom")
+                    .font(.system(size: 22, weight: .bold))
+                    .tracking(-0.4)
+                    .foregroundStyle(Theme.primaryText)
+                Text("Timeline")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondaryText)
+                Text(count.map { ArtworkText.photoCount($0) } ?? "Pick from and to")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(selected ? Theme.accent : Theme.tertiaryText)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 12, trailing: 8))
+        .frame(width: 148)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(selected ? Theme.accent : .clear, lineWidth: 2))
+        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Custom timeline")
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
 
 private struct YearCard: View {
     let year: Int

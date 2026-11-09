@@ -91,9 +91,14 @@ public struct TextLayer: Codable, Hashable, Identifiable, Sendable {
     public static let maxSize = 0.3
 
     public func displayText(year: Int, includedPhotos: Int, locale: Locale = .current) -> String {
+        displayText(title: String(year), includedPhotos: includedPhotos, locale: locale)
+    }
+
+    /// - Parameter title: what the poster covers ("2025" or a custom timeline).
+    public func displayText(title: String, includedPhotos: Int, locale: Locale = .current) -> String {
         if let text { return text }
         switch role {
-        case .year: return String(year)
+        case .year: return title
         case .photoCount: return ArtworkText.photoCount(includedPhotos, locale: locale)
         case .custom: return ""
         }

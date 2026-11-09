@@ -84,7 +84,7 @@ struct SavedPostersView: View {
             isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
             presenting: confirmDelete
         ) { record in
-            Button("Delete \(String(record.year)) Poster", role: .destructive) {
+            Button("Delete \(record.title) Poster", role: .destructive) {
                 let list = posters
                 let index = list.firstIndex { $0.id == record.id }
                 model.delete(record.id)
@@ -173,8 +173,8 @@ struct SavedPostersView: View {
     private func details(_ record: GenerationRecord) -> some View {
         let settings = model.artwork(for: record.id)?.settings ?? record.settings
         return VStack(alignment: .leading, spacing: 4) {
-            Text(String(record.year))
-                .font(.system(size: 28, weight: .heavy))
+            Text(record.title)
+                .font(.system(size: record.isCustomTimeline ? 22 : 28, weight: .heavy))
                 .tracking(-0.6)
                 .foregroundStyle(Theme.primaryText)
             Text([
@@ -291,7 +291,7 @@ private struct SavedPosterCard: View {
             if session.report == nil { await session.load() }
         }
         .accessibilityElement()
-        .accessibilityLabel("\(String(record.year)) poster")
+        .accessibilityLabel("\(record.title) poster")
         .accessibilityHint(focused ? "Double tap to open" : "Double tap to select")
     }
 }
