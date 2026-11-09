@@ -54,6 +54,12 @@ public struct PosterLayout: Hashable, Sendable {
     public let yearLabel: PixelRect
     public let countLabel: PixelRect
     public let watermark: PixelRect
+    /// True when the barcode fills the whole canvas with no border.
+    public let borderless: Bool
+    /// The framed layout's barcode and watermark, which the default photo slots
+    /// are placed around (same as `barcode`/`watermark` unless borderless).
+    let slotBarcode: PixelRect
+    let slotWatermark: PixelRect
 
     /// Distance along which stripes are laid out (width in landscape, height in portrait).
     public var barcodeLength: Int { orientation == .landscape ? barcode.width : barcode.height }
@@ -61,13 +67,43 @@ public struct PosterLayout: Hashable, Sendable {
     /// floor(barcode length / 2): keeps every stripe at least two pixels thick.
     public var maxGroups: Int { barcodeLength / 2 }
 
-    public init(printSize: PrintSize, orientation: Orientation) {
-        self.init(canvas: printSize.canvas(orientation), orientation: orientation)
+    public init(printSize: PrintSize, orientation: Orientation, borderless: Bool = false) {
+        self.init(canvas: printSize.canvas(orientation), orientation: orientation, borderless: borderless)
     }
 
-    public init(canvas: PixelSize, orientation: Orientation) {
+    /// The layout for an artwork's settings (print size or wallpaper, border or not).
+    public init(settings: ArtworkSettings) {
+        self.init(canvas: settings.canvas, orientation: settings.orientation, borderless: settings.borderless)
+    }
+
+    /// Same proportions on a different canvas (used for screen previews).
+    public init(settings: ArtworkSettings, canvas: PixelSize) {
+        self.init(canvas: canvas, orientation: settings.orientation, borderless: settings.borderless)
+    }
+
+    public init(canvas: PixelSize, orientation: Orientation, borderless: Bool = false) {
+        if borderless {
+            // Labels and photo slots keep their framed positions (now over the
+            // stripes); the barcode fills the canvas; the watermark is a short
+            // centered line near the bottom edge.
+            let framed = PosterLayout(canvas: canvas, orientation: orientation)
+            let u = Double(canvas.short) / 100
+            let width = Int((Double(canvas.short) * 0.34).rounded())
+            let height = Int((1.4 * u).rounded())
+            self.canvas = canvas
+            self.orientation = orientation
+            self.borderless = true
+            barcode = PixelRect(x: 0, y: 0, width: canvas.width, height: canvas.height)
+            yearLabel = framed.yearLabel
+            countLabel = framed.countLabel
+            watermark = PixelRect(x: (canvas.width - width) / 2, y: canvas.height - height - Int((1.2 * u).rounded()), width: width, height: height)
+            slotBarcode = framed.barcode
+            slotWatermark = framed.watermark
+            return
+        }
         self.canvas = canvas
         self.orientation = orientation
+        self.borderless = false
         let long = canvas.long
         let short = canvas.short
         let length = long * 9 / 10
@@ -96,6 +132,8 @@ public struct PosterLayout: Hashable, Sendable {
         // Included photo count: the bottom of the lower border.
         let countHeight = px(2.0 * u)
         countLabel = PixelRect(x: barcode.x, y: canvas.height - px(1.0 * u) - countHeight, width: barcode.width, height: countHeight)
+        slotBarcode = barcode
+        slotWatermark = watermark
     }
 
     /// Slots for optional border photos. Landscape: one centered row in the
@@ -109,7 +147,7 @@ public struct PosterLayout: Hashable, Sendable {
 
         switch orientation {
         case .landscape:
-            let top = watermark.maxY + px(0.7 * u)
+            let top = slotWatermark.maxY + px(0.7 * u)
             let bottom = countLabel.y - px(0.7 * u)
             let height = bottom - top
             let width = height * 4 / 3
@@ -119,12 +157,12 @@ public struct PosterLayout: Hashable, Sendable {
             return (0..<count).map { PixelRect(x: x0 + $0 * (width + gap), y: top, width: width, height: height) }
 
         case .portrait:
-            let sideWidth = barcode.x
+            let sideWidth = slotBarcode.x
             let margin = px(1.75 * u)
             let width = sideWidth - 2 * margin
             let height = width * 5 / 4
             let gap = px(1.5 * u)
-            let centerY = barcode.y + barcode.height / 2
+            let centerY = slotBarcode.y + slotBarcode.height / 2
             var slots: [PixelRect] = []
             for index in 0..<count {
                 let isLeft = index % 2 == 0
@@ -132,7 +170,7 @@ public struct PosterLayout: Hashable, Sendable {
                 let position = index / 2
                 let stack = perSide * height + (perSide - 1) * gap
                 let y = centerY - stack / 2 + position * (height + gap)
-                let x = isLeft ? margin : barcode.maxX + margin
+                let x = isLeft ? margin : slotBarcode.maxX + margin
                 slots.append(PixelRect(x: x, y: y, width: width, height: height))
             }
             return slots

@@ -85,23 +85,46 @@ public struct ArtworkSettings: Codable, Hashable, Sendable {
     /// Poster background (the border around the barcode).
     public var background: RGB8
     public var stripeStyle: StripeStyle
+    /// Barcode fills the whole poster, with no border around it.
+    public var borderless: Bool
+    /// When set, the artwork is a phone wallpaper of this pixel size (given
+    /// upright, width < height) instead of a print size.
+    public var wallpaper: PixelSize?
 
     public init(
         mode: BarcodeMode = .everyPhoto,
         printSize: PrintSize = .size24x36,
         orientation: Orientation = .landscape,
         background: RGB8 = .white,
-        stripeStyle: StripeStyle = .solid
+        stripeStyle: StripeStyle = .solid,
+        borderless: Bool = false,
+        wallpaper: PixelSize? = nil
     ) {
         self.mode = mode
         self.printSize = printSize
         self.orientation = orientation
         self.background = background
         self.stripeStyle = stripeStyle
+        self.borderless = borderless
+        self.wallpaper = wallpaper
+    }
+
+    /// Output pixels: the wallpaper size, or the print size at 300 PPI.
+    public var canvas: PixelSize {
+        if let wallpaper {
+            let short = min(wallpaper.width, wallpaper.height), long = max(wallpaper.width, wallpaper.height)
+            return orientation == .portrait ? PixelSize(width: short, height: long) : PixelSize(width: long, height: short)
+        }
+        return printSize.canvas(orientation)
+    }
+
+    /// "24 × 36" or "Wallpaper".
+    public var sizeTitle: String {
+        wallpaper == nil ? "\(printSize.shortInches) × \(printSize.longInches)" : "Wallpaper"
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, printSize, orientation, background, stripeStyle
+        case mode, printSize, orientation, background, stripeStyle, borderless, wallpaper
     }
 
     /// Settings saved before `background` existed decode with a white background.
@@ -112,6 +135,8 @@ public struct ArtworkSettings: Codable, Hashable, Sendable {
         orientation = try c.decode(Orientation.self, forKey: .orientation)
         background = try c.decodeIfPresent(RGB8.self, forKey: .background) ?? .white
         stripeStyle = try c.decodeIfPresent(StripeStyle.self, forKey: .stripeStyle) ?? .solid
+        borderless = try c.decodeIfPresent(Bool.self, forKey: .borderless) ?? false
+        wallpaper = try c.decodeIfPresent(PixelSize.self, forKey: .wallpaper)
     }
 
     public static let `default` = ArtworkSettings()

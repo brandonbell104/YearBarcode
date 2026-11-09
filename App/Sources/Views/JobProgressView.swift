@@ -96,17 +96,20 @@ struct JobProgressView: View {
         let fraction = progress?.fraction ?? 0
         let filled = min(barCount, Int((Double(barCount) * fraction).rounded()))
         let painted: [Color] = (0..<barCount).map { i in
-            guard i < filled, !colors.isEmpty else { return Color(hex: 0xEDEDF0) }
+            guard i < filled, !colors.isEmpty else { return Color(hex: 0xDADADF).opacity(0.6) }
             // Spread the colors we have over the filled part, oldest first.
             return Color(colors[min(colors.count - 1, i * colors.count / max(filled, 1))])
         }
-        return StripesView(colors: painted)
+        // Match the chosen poster: landscape fills left to right, portrait top to bottom.
+        let portrait = record?.settings.orientation == .portrait
+        return StripesView(colors: painted, vertical: !portrait)
             .clipShape(RoundedRectangle(cornerRadius: 2))
-            .padding(20)
-            .frame(height: 260)
-            .frame(maxWidth: .infinity)
-            .background(.white, in: RoundedRectangle(cornerRadius: 24))
+            .padding(portrait ? 16 : 20)
+            .frame(width: portrait ? 190 : nil, height: portrait ? 280 : 260)
+            .frame(maxWidth: portrait ? nil : .infinity)
+            .background(Color(record?.settings.background ?? .white), in: RoundedRectangle(cornerRadius: portrait ? 18 : 24))
             .shadow(color: .black.opacity(0.55), radius: 30, y: 30)
+            .frame(maxWidth: .infinity)
             .accessibilityLabel("Barcode filling in as colors are read")
     }
 

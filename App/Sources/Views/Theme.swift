@@ -313,7 +313,7 @@ struct PosterWell: View {
     var height: CGFloat = 270
 
     var body: some View {
-        let canvas = settings.printSize.canvas(settings.orientation)
+        let canvas = settings.canvas
         RoundedRectangle(cornerRadius: 24)
             .fill(Theme.posterWell)
             .frame(height: height)

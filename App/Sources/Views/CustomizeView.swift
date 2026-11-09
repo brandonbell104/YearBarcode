@@ -49,11 +49,33 @@ struct CustomizeView: View {
                         .padding(.top, 20)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel("Background").padding(.horizontal, 8)
-                        BackgroundPicker(color: settings.background) { color in
-                            var updated = settings
-                            updated.background = color
-                            Task { await session.update(updated) }
+                        SectionLabel("Border").padding(.horizontal, 8)
+                        VStack(spacing: 0) {
+                            Toggle(isOn: Binding(
+                                get: { settings.borderless },
+                                set: { value in
+                                    var updated = settings
+                                    updated.borderless = value
+                                    Task { await session.update(updated) }
+                                }
+                            )) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("No border").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.primaryText)
+                                    Text("The barcode fills the whole poster, edge to edge.")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Theme.secondaryText)
+                                }
+                            }
+                            .tint(Theme.accent)
+                            .padding(14)
+                            if !settings.borderless {
+                                Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, 14)
+                                BackgroundPicker(color: settings.background) { color in
+                                    var updated = settings
+                                    updated.background = color
+                                    Task { await session.update(updated) }
+                                }
+                            }
                         }
                         .background(Theme.card, in: RoundedRectangle(cornerRadius: 18))
                     }
@@ -247,7 +269,7 @@ struct CustomizeView: View {
 
     @ViewBuilder
     private func exportBar(_ session: ArtworkSession) -> some View {
-        let canvas = session.artwork.settings.printSize.canvas(session.artwork.settings.orientation)
+        let canvas = session.artwork.settings.canvas
         VStack(spacing: 10) {
             switch session.exportState {
             case .exporting(let fraction):

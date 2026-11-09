@@ -24,7 +24,7 @@ enum ArtworkRenderer {
     // MARK: Preview
 
     static func previewCanvas(for settings: ArtworkSettings, longEdge: Int = 1500) -> PixelSize {
-        let full = settings.printSize.canvas(settings.orientation)
+        let full = settings.canvas
         let scale = Double(longEdge) / Double(full.long)
         return PixelSize(width: Int((Double(full.width) * scale).rounded()), height: Int((Double(full.height) * scale).rounded()))
     }
@@ -33,7 +33,7 @@ enum ArtworkRenderer {
     /// draws only the barcode and background (the layout editor draws layers live on top).
     static func preview(_ input: ArtworkInput, longEdge: Int = 1500, borderImages: [String: UIImage], includeLayers: Bool = true) -> CGImage? {
         let canvas = previewCanvas(for: input.settings, longEdge: longEdge)
-        let layout = PosterLayout(canvas: canvas, orientation: input.settings.orientation)
+        let layout = PosterLayout(settings: input.settings, canvas: canvas)
         let colors = StripeGeometry.previewColors(input.barcode.stripes, pixels: layout.barcodeLength)
         let profiles = input.settings.stripeStyle == .squeezed
             ? StripeGeometry.previewProfiles(input.barcode.stripes, pixels: layout.barcodeLength, orientation: input.settings.orientation)
@@ -50,7 +50,7 @@ enum ArtworkRenderer {
     /// Streams the full-resolution PNG. Photos are fetched at the resolution
     /// their frames need; a missing one fails instead of being replaced.
     static func exportPNG(_ input: ArtworkInput, library: PhotoLibraryService, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
-        let layout = PosterLayout(printSize: input.settings.printSize, orientation: input.settings.orientation)
+        let layout = PosterLayout(settings: input.settings)
         let photos = input.design.photos
 
         var images: [String: UIImage] = [:]
@@ -68,8 +68,10 @@ enum ArtworkRenderer {
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Exports", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let size = input.settings.printSize
-        let name = "Year-Barcode-\(input.year)-\(size.shortInches)x\(size.longInches)-\(input.settings.orientation.rawValue).png"
+        let size = input.settings.wallpaper == nil
+            ? "\(input.settings.printSize.shortInches)x\(input.settings.printSize.longInches)"
+            : "wallpaper-\(input.settings.canvas.width)x\(input.settings.canvas.height)"
+        let name = "Year-Barcode-\(input.year)-\(size)-\(input.settings.orientation.rawValue).png"
         let url = directory.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: url)
 

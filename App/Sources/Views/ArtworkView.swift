@@ -89,9 +89,10 @@ struct ArtworkView: View {
                         )
                         .disabled(!report.supportsSqueezed && settings.stripeStyle == .solid)
                         .opacity(!report.supportsSqueezed && settings.stripeStyle == .solid ? 0.5 : 1)
+                        SectionLabel("Size", trailing: sizeDetail(settings)).padding(.top, 4)
                         ChipPicker(
-                            options: PrintSize.allCases.map { ($0, "\($0.shortInches) × \($0.longInches)") },
-                            selection: binding(session, \.printSize),
+                            options: SizeChoice.all.map { ($0, $0.title) },
+                            selection: sizeBinding(session),
                             height: 40
                         )
                         if !report.supportsSqueezed {
@@ -109,8 +110,8 @@ struct ArtworkView: View {
                             Text(ArtworkText.capacityHint(
                                 year: report.snapshot.year,
                                 photoCount: counts.included,
-                                capacity: PosterLayout(printSize: settings.printSize, orientation: settings.orientation).maxGroups,
-                                size: settings.printSize,
+                                capacity: PosterLayout(settings: settings).maxGroups,
+                                sizeTitle: settings.wallpaper == nil ? "\(settings.sizeTitle) poster" : "wallpaper",
                                 exact: true
                             ))
                             .font(.system(size: 13))
@@ -247,6 +248,35 @@ struct ArtworkView: View {
         }
     }
 
+    private func sizeDetail(_ settings: ArtworkSettings) -> String {
+        let canvas = settings.canvas
+        return settings.wallpaper == nil
+            ? "inches · 300 ppi"
+            : "This iPhone · \(canvas.width) × \(canvas.height)"
+    }
+
+    /// Print sizes plus a wallpaper sized to this iPhone's screen.
+    private func sizeBinding(_ session: ArtworkSession) -> Binding<SizeChoice> {
+        Binding(
+            get: {
+                let settings = session.artwork.settings
+                return settings.wallpaper == nil ? .print(settings.printSize) : .wallpaper
+            },
+            set: { choice in
+                var updated = session.artwork.settings
+                switch choice {
+                case .print(let size):
+                    updated.printSize = size
+                    updated.wallpaper = nil
+                case .wallpaper:
+                    updated.wallpaper = DeviceScreen.wallpaperSize
+                    updated.orientation = .portrait
+                }
+                Task { await session.update(updated) }
+            }
+        )
+    }
+
     private func binding<T>(_ session: ArtworkSession, _ keyPath: WritableKeyPath<ArtworkSettings, T>) -> Binding<T> {
         Binding(
             get: { session.artwork.settings[keyPath: keyPath] },
@@ -269,5 +299,29 @@ extension ExclusionReason {
         case .duplicate: return "Duplicates"
         case .burst: return "Burst photos"
         }
+    }
+}
+
+enum SizeChoice: Hashable {
+    case print(PrintSize)
+    case wallpaper
+
+    static let all: [SizeChoice] = PrintSize.allCases.map { .print($0) } + [.wallpaper]
+
+    var title: String {
+        switch self {
+        case .print(let size): return "\(size.shortInches)×\(size.longInches)"
+        case .wallpaper: return "Wallpaper"
+        }
+    }
+}
+
+/// The exact screen of the iPhone the app is running on.
+enum DeviceScreen {
+    /// Upright pixel size of the display, e.g. 1179 × 2556 on iPhone 16 Pro.
+    @MainActor static var wallpaperSize: PixelSize {
+        let bounds = UIScreen.main.nativeBounds
+        let a = Int(bounds.width.rounded()), b = Int(bounds.height.rounded())
+        return PixelSize(width: min(a, b), height: max(a, b))
     }
 }

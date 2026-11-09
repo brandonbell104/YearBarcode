@@ -65,10 +65,11 @@ struct YearsView: View {
                     yearCards.padding(.top, 18)
 
                     VStack(alignment: .leading, spacing: 22) {
-                        modeSection
                         styleSection
                         orientationSection
-                        sizeSection
+                        Text("Mode, print size, border and wallpaper can be changed after generating.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.tertiaryText)
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 18)
@@ -133,17 +134,6 @@ struct YearsView: View {
         return "Not generated yet"
     }
 
-    private var modeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("Mode")
-            PillSegmented(options: BarcodeMode.allCases.map { ($0, $0.title) }, selection: $settings.mode)
-            Text(modeHelp)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
     private var styleSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel("Stripe style")
@@ -155,17 +145,6 @@ struct YearsView: View {
         }
     }
 
-    private var modeHelp: String {
-        guard settings.mode == .everyPhoto, let year = selectedYear, let count = model.yearCounts[year] else {
-            return settings.mode.helpText
-        }
-        return ArtworkText.capacityHint(
-            year: year, photoCount: count,
-            capacity: PosterLayout(printSize: settings.printSize, orientation: settings.orientation).maxGroups,
-            size: settings.printSize, exact: false
-        )
-    }
-
     private var orientationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel("Orientation")
@@ -175,16 +154,6 @@ struct YearsView: View {
                         .onTapGesture { settings.orientation = orientation }
                 }
             }
-        }
-    }
-
-    private var sizeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("Print size", trailing: "inches · 300 ppi")
-            ChipPicker(
-                options: PrintSize.allCases.map { ($0, "\($0.shortInches) × \($0.longInches)") },
-                selection: $settings.printSize
-            )
         }
     }
 

@@ -101,7 +101,7 @@ public struct GenerationReport: Sendable {
 
     /// Stripes for any mode/size/orientation, recomputed from per-photo colors.
     public func barcode(for settings: ArtworkSettings) -> BarcodeData {
-        let layout = PosterLayout(printSize: settings.printSize, orientation: settings.orientation)
+        let layout = PosterLayout(settings: settings)
         return Grouper.barcode(photos: included, mode: settings.mode, capacity: layout.maxGroups)
     }
 }
@@ -138,7 +138,12 @@ public enum ArtworkText {
     /// - Parameter exact: true when `photoCount` is the final included count;
     ///   false for a library count taken before filtering.
     public static func capacityHint(year: Int, photoCount: Int, capacity: Int, size: PrintSize, exact: Bool, locale: Locale = .current) -> String {
-        let fits = "This \(size.shortInches) × \(size.longInches) poster fits \(formatted(capacity, locale: locale)) photos as separate stripes."
+        capacityHint(year: year, photoCount: photoCount, capacity: capacity, sizeTitle: "\(size.shortInches) × \(size.longInches) poster", exact: exact, locale: locale)
+    }
+
+    /// - Parameter sizeTitle: e.g. "24 × 36 poster" or "wallpaper".
+    public static func capacityHint(year: Int, photoCount: Int, capacity: Int, sizeTitle: String, exact: Bool, locale: Locale = .current) -> String {
+        let fits = "This \(sizeTitle) fits \(formatted(capacity, locale: locale)) photos as separate stripes."
         let has = exact ? "\(formatted(photoCount, locale: locale)) photos are included" : "\(year) has \(formatted(photoCount, locale: locale)) photos"
         if photoCount > capacity {
             return "\(fits) \(has), so some neighboring photos from the same day will be combined."

@@ -27,7 +27,7 @@ struct LayoutEditorView: View {
     private static let zoomLevels: [CGFloat] = [1, 2, 3, 4]
 
     private var layout: PosterLayout {
-        PosterLayout(printSize: session.artwork.settings.printSize, orientation: session.artwork.settings.orientation)
+        PosterLayout(settings: session.artwork.settings)
     }
     private var year: Int { session.report?.snapshot.year ?? 0 }
     private var includedPhotos: Int { session.barcode?.includedPhotoCount ?? 0 }
