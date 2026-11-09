@@ -19,10 +19,29 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
+      - name: Check the Cloudflare secrets
+        working-directory: .
+        env:
+          RAW_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RAW_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Trim spaces and line breaks that sneak in when pasting.
+          trim() { local v="${1//$'\r'/}"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
+          token="$(trim "$RAW_TOKEN")"
+          account="$(trim "$RAW_ACCOUNT")"
+          if [ -z "$token" ] || [[ "$token" =~ [[:space:]] ]]; then
+            echo "::error::The CLOUDFLARE_API_TOKEN secret is empty or has more than the token in it (a line break or extra text). Create a new token in Cloudflare and paste only the token itself into the GitHub secret."
+            exit 1
+          fi
+          if ! [[ "$account" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::error::The CLOUDFLARE_ACCOUNT_ID secret doesn't look like an account ID (32 letters and numbers, from the Workers & Pages overview page)."
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "CLOUDFLARE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "CLOUDFLARE_ACCOUNT_ID=$account" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
