@@ -97,3 +97,12 @@ CI (`.github/workflows/ci.yml`) runs the core tests on Linux and macOS and build
 - [ ] Interrupt with airplane mode, revoking access, locking the device, cancelling from the system UI, and force-quitting. Each must show a truthful state and Resume must continue from the checkpoint.
 - [ ] Measure peak memory and battery during a 24×36 export on the lowest-memory supported iPhone.
 - [ ] Purchase, Ask to Buy (pending), refund (revocation) and restore. The watermark disappears from new renders without rescanning photos.
+
+## Print orders backend (`backend/`)
+
+A Cloudflare Worker that takes print orders: Stripe for payment, Prodigi for printing and shipping, R2 for the poster files. It keeps no database: the order ID is the Stripe PaymentIntent ID, and printing status comes from Prodigi.
+
+- `npm test` runs the order-flow tests against fake Stripe/Prodigi services.
+- `.github/workflows/backend.yml` deploys on every push to `backend/` and copies `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `PRODIGI_API_KEY` from GitHub secrets into the Worker.
+- Products, Prodigi SKUs and prices in `backend/src/catalog.ts` are placeholders until confirmed.
+

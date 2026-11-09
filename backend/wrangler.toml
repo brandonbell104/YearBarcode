@@ -1,0 +1,18 @@
+# Year Barcode print orders: a stateless Cloudflare Worker.
+# Orders live on Stripe PaymentIntents (the order ID is the PaymentIntent ID);
+# printing and shipping status live at Prodigi; poster files live in R2.
+name = "year-barcode-orders"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "PRINTS"
+bucket_name = "year-barcode-prints"
+
+[vars]
+# Sandbox until launch. Switch to https://api.prodigi.com/v4.0 for real orders.
+PRODIGI_BASE_URL = "https://api.sandbox.prodigi.com/v4.0"
+
+# Secrets (set by the deploy workflow from GitHub secrets, never committed):
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PRODIGI_API_KEY, ASSET_SIGNING_KEY
