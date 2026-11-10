@@ -116,7 +116,7 @@ final class PhotoLibraryService: @unchecked Sendable {
     /// People, so a person's photos come in through an album the user makes.)
     func albums() -> [PhotoAlbum] {
         var result: [PhotoAlbum] = []
-        func add(_ collections: PHFetchResult<PHAssetCollection>, kind: (PHAssetCollection) -> PhotoAlbum.Kind) {
+        func add(_ collections: PHFetchResult<PHAssetCollection>, kind: @escaping (PHAssetCollection) -> PhotoAlbum.Kind) {
             collections.enumerateObjects { collection, _, _ in
                 let assets = PHAsset.fetchAssets(in: collection, options: self.stillImageOptions())
                 guard assets.count > 0 else { return }
