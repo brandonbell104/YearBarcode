@@ -26,6 +26,9 @@ final class AppModel {
     /// that only exist as saved artwork.
     var yearCounts: [Int: Int] = [:]
     var isLoadingYears = false
+    /// Albums for album posters (loaded when the Album card is opened).
+    var albums: [PhotoAlbum] = []
+    var isLoadingAlbums = false
     var generations: [GenerationRecord] = []
     var progress: [UUID: JobProgress] = [:]
     /// Colors of photos analyzed so far in a running job (for the live barcode).
@@ -82,6 +85,14 @@ final class AppModel {
         isLoadingYears = false
     }
 
+    func refreshAlbums() async {
+        guard authorization.access != nil else { return }
+        isLoadingAlbums = true
+        let library = self.library
+        albums = await Task.detached(priority: .userInitiated) { library.albums() }.value
+        isLoadingAlbums = false
+    }
+
     /// The most recent finished poster for a year, if any.
     func latestFinished(year: Int) -> GenerationRecord? {
         generations.first { $0.year == year && $0.status == .finished && !$0.isCustomTimeline }
@@ -131,6 +142,9 @@ final class AppModel {
             runner.start(snapshot.id)
         } catch SnapshotError.futureYear {
             alert = "Future years are not available."
+        } catch SnapshotError.emptyAlbum {
+            alert = "That album has no photos with a date taken, or it no longer exists."
+            await refreshAlbums()
         } catch SnapshotError.invalidRange {
             alert = "Choose a start date on or before the end date, and not in the future."
         } catch {

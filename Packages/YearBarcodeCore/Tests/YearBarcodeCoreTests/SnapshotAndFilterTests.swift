@@ -274,6 +274,33 @@ final class CustomTimelineTests: XCTestCase {
         XCTAssertEqual(TimelineTitle.make(year: 2025, start: nil, end: nil, timeZone: tz), "2025")
     }
 
+    func testAlbumUsesEveryDatedPhotoAcrossYearsAndItsName() throws {
+        let assets = [
+            LibraryAssetDescriptor(assetID: "old", captureDate: date(2019, 7, 4, 12), revision: "r"),
+            LibraryAssetDescriptor(assetID: "new", captureDate: date(2025, 2, 1, 8), revision: "r"),
+            LibraryAssetDescriptor(assetID: "undated", captureDate: nil, revision: "r"),
+            LibraryAssetDescriptor(assetID: "future", captureDate: date(2026, 6, 1), revision: "r"),
+            LibraryAssetDescriptor(assetID: "old", captureDate: date(2019, 7, 4, 12), revision: "r"),
+        ]
+        let snapshot = try SnapshotBuilder.build(
+            album: "  Emma ", cutoff: date(2026, 1, 1), timeZone: tz, settings: .default, access: .full, assets: assets
+        )
+        XCTAssertEqual(snapshot.entries.map(\.assetID), ["old", "new"])
+        XCTAssertEqual(snapshot.missingDateCount, 1)
+        XCTAssertEqual(snapshot.year, 2019)
+        XCTAssertEqual(snapshot.title, "Emma")
+        XCTAssertNotNil(snapshot.rangeStart)
+
+        // Survives a round trip (older snapshots without the field still decode).
+        let decoded = try JSONDecoder().decode(GenerationSnapshot.self, from: JSONEncoder().encode(snapshot))
+        XCTAssertEqual(decoded.albumTitle, "Emma")
+
+        XCTAssertThrowsError(try SnapshotBuilder.build(
+            album: "Empty", cutoff: date(2026, 1, 1), timeZone: tz, settings: .default, access: .full,
+            assets: [LibraryAssetDescriptor(assetID: "u", captureDate: nil, revision: "r")]
+        )) { XCTAssertEqual($0 as? SnapshotError, .emptyAlbum) }
+    }
+
     func testInvalidRanges() {
         XCTAssertThrowsError(try SnapshotBuilder.build(
             from: date(2025, 5, 2), through: date(2025, 5, 1), cutoff: date(2026, 1, 1),

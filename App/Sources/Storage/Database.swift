@@ -97,6 +97,8 @@ final class Database: @unchecked Sendable {
         // Custom timelines (added later): first and last day, or NULL for a whole year.
         try? execute("ALTER TABLE generation ADD COLUMN range_start REAL")
         try? execute("ALTER TABLE generation ADD COLUMN range_end REAL")
+        // Album posters (added later): the album's name, or NULL.
+        try? execute("ALTER TABLE generation ADD COLUMN album_title TEXT")
         // Squeezed-photo profiles (added later): 64 RGB triples each, base64.
         try? execute("ALTER TABLE photo_analysis ADD COLUMN profile_rows TEXT")
         try? execute("ALTER TABLE photo_analysis ADD COLUMN profile_columns TEXT")
@@ -208,12 +210,16 @@ struct GenerationRecord: Identifiable, Hashable, Sendable {
     /// Custom timeline (first and last day); nil for a whole year.
     var rangeStart: Date?
     var rangeEnd: Date?
+    /// Album posters: the album's name. They also carry a range.
+    var albumTitle: String? = nil
 
+    /// Not a whole calendar year (a custom timeline or an album).
     var isCustomTimeline: Bool { rangeStart != nil }
+    var isAlbum: Bool { albumTitle != nil }
 
-    /// "2025", or "Mar 3 – Jun 8, 2025" for a custom timeline.
+    /// "2025", "Mar 3 – Jun 8, 2025" for a custom timeline, or the album's name.
     var title: String {
-        TimelineTitle.make(year: year, start: rangeStart, end: rangeEnd,
+        albumTitle ?? TimelineTitle.make(year: year, start: rangeStart, end: rangeEnd,
                            timeZone: TimeZone(identifier: timeZoneIdentifier) ?? .current)
     }
 }
@@ -236,8 +242,8 @@ extension Database {
     func insert(snapshot: GenerationSnapshot) throws {
         try transaction {
             try run("""
-            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end, album_title)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
             """, [
                 .text(snapshot.id.uuidString), .int(Int64(snapshot.year)), .double(snapshot.cutoff.timeIntervalSince1970),
                 .text(snapshot.timeZoneIdentifier), .text(try json(snapshot.settings)), .text(snapshot.access.rawValue),
@@ -245,6 +251,7 @@ extension Database {
                 .int(Int64(snapshot.missingDateCount)), .int(Int64(snapshot.invalidDateCount)), .double(Date().timeIntervalSince1970),
                 snapshot.rangeStart.map { SQLValue.double($0.timeIntervalSince1970) } ?? SQLValue.null,
                 snapshot.rangeEnd.map { SQLValue.double($0.timeIntervalSince1970) } ?? SQLValue.null,
+                .optionalText(snapshot.albumTitle),
             ])
             for (position, entry) in snapshot.entries.enumerated() {
                 try run("""
@@ -285,8 +292,8 @@ extension Database {
         let now = Date().timeIntervalSince1970
         try transaction {
             try run("""
-            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end)
-            SELECT ?, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, ?, range_start, range_end
+            INSERT INTO generation (id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end, album_title)
+            SELECT ?, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, ?, range_start, range_end, album_title
             FROM generation WHERE id = ?
             """, [.text(newID.uuidString), .double(now), .text(id.uuidString)])
             try run("""
@@ -305,7 +312,7 @@ extension Database {
         try run("DELETE FROM generation WHERE id = ?", [.text(id.uuidString)])
     }
 
-    private static let generationColumns = "id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end"
+    private static let generationColumns = "id, year, cutoff, time_zone, settings, access, analysis_version, layout_version, status, interruption, checkpoint, missing_date_count, invalid_date_count, created_at, range_start, range_end, album_title"
 
     private static func generation(from s: Statement) throws -> GenerationRecord {
         GenerationRecord(
@@ -324,7 +331,8 @@ extension Database {
             invalidDateCount: s.int(12),
             createdAt: Date(timeIntervalSince1970: s.double(13)),
             rangeStart: s.optionalDouble(14).map(Date.init(timeIntervalSince1970:)),
-            rangeEnd: s.optionalDouble(15).map(Date.init(timeIntervalSince1970:))
+            rangeEnd: s.optionalDouble(15).map(Date.init(timeIntervalSince1970:)),
+            albumTitle: s.text(16)
         )
     }
 
@@ -353,7 +361,7 @@ extension Database {
             settings: record.settings, access: record.access, analysisVersion: record.analysisVersion,
             layoutVersion: record.layoutVersion, entries: try manifest(record.id).map { $0.entry },
             missingDateCount: record.missingDateCount, invalidDateCount: record.invalidDateCount,
-            rangeStart: record.rangeStart, rangeEnd: record.rangeEnd
+            rangeStart: record.rangeStart, rangeEnd: record.rangeEnd, albumTitle: record.albumTitle
         )
     }
 

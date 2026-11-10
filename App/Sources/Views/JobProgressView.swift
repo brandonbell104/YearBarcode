@@ -15,7 +15,7 @@ struct JobProgressView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            NavHeader(backTitle: "Years", title: record.map { $0.isCustomTimeline ? "Custom Timeline" : $0.title } ?? "", onBack: { model.path.removeAll() })
+            NavHeader(backTitle: "Years", title: record.map { $0.isCustomTimeline && !$0.isAlbum ? "Custom Timeline" : $0.title } ?? "", onBack: { model.path.removeAll() })
 
             liveBarcode.padding(.top, 14)
 
@@ -139,7 +139,7 @@ struct JobProgressView: View {
     }
 
     private var steps: [(String, StepRow.Phase)] {
-        let span = record.map { $0.isCustomTimeline ? $0.title : String($0.year) } ?? "the year"
+        let span = record.map { $0.isAlbum ? "the \($0.title) album" : $0.isCustomTimeline ? $0.title : String($0.year) } ?? "the year"
         var reading = StepRow.Phase.paused
         var building = StepRow.Phase.next
         switch status {

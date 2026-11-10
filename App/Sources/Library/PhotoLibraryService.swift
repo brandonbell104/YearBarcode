@@ -17,6 +17,19 @@ enum LibraryAuthorization: Equatable {
     }
 }
 
+/// An album the user can make a poster from (their own, shared, or Favorites).
+struct PhotoAlbum: Identifiable, Hashable, Sendable {
+    enum Kind: Int, Sendable { case favorites, mine, shared }
+
+    var id: String
+    var title: String
+    /// Still photos in the album that this app can see.
+    var count: Int
+    var kind: Kind
+    /// Cover photo for the list.
+    var keyAssetID: String?
+}
+
 enum ImageRequestError: Error {
     /// The asset no longer exists or is no longer accessible.
     case unavailable
@@ -94,6 +107,51 @@ final class PhotoLibraryService: @unchecked Sendable {
         PHAsset.fetchAssets(with: stillImageOptions(predicate: NSPredicate(
             format: "creationDate >= %@ AND creationDate < %@", start as NSDate, end as NSDate
         ))).count
+    }
+
+    // MARK: - Albums
+
+    /// Favorites, then the user's albums and shared albums by name. Albums
+    /// with no visible still photos are left out. (Apple doesn't let apps read
+    /// People, so a person's photos come in through an album the user makes.)
+    func albums() -> [PhotoAlbum] {
+        var result: [PhotoAlbum] = []
+        func add(_ collections: PHFetchResult<PHAssetCollection>, kind: (PHAssetCollection) -> PhotoAlbum.Kind) {
+            collections.enumerateObjects { collection, _, _ in
+                let assets = PHAsset.fetchAssets(in: collection, options: self.stillImageOptions())
+                guard assets.count > 0 else { return }
+                let key = PHAsset.fetchKeyAssets(in: collection, options: nil)?.firstObject ?? assets.lastObject
+                result.append(PhotoAlbum(
+                    id: collection.localIdentifier,
+                    title: collection.localizedTitle ?? "Untitled Album",
+                    count: assets.count,
+                    kind: kind(collection),
+                    keyAssetID: key?.localIdentifier
+                ))
+            }
+        }
+        add(PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .smartAlbumFavorites, options: nil)) { _ in .favorites }
+        add(PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)) {
+            $0.assetCollectionSubtype == .albumCloudShared ? .shared : .mine
+        }
+        return result.sorted {
+            $0.kind.rawValue != $1.kind.rawValue
+                ? $0.kind.rawValue < $1.kind.rawValue
+                : $0.title.localizedStandardCompare($1.title) == .orderedAscending
+        }
+    }
+
+    /// Every accessible still image in the album (dated or not, so undated
+    /// photos can be counted). Nil when the album no longer exists.
+    func descriptors(albumID: String) -> [LibraryAssetDescriptor]? {
+        guard let collection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumID], options: nil).firstObject else {
+            return nil
+        }
+        var result: [LibraryAssetDescriptor] = []
+        PHAsset.fetchAssets(in: collection, options: stillImageOptions()).enumerateObjects { asset, _, _ in
+            result.append(LibraryAssetDescriptor(assetID: asset.localIdentifier, captureDate: asset.creationDate, revision: Self.revision(of: asset)))
+        }
+        return result
     }
 
     /// PhotoKit has no public revision number. Edits change adjustments,

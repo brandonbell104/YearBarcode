@@ -33,6 +33,9 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
     /// (inclusive). Nil for a whole calendar year.
     public var rangeStart: Date?
     public var rangeEnd: Date?
+    /// An album poster: the album's name at Generate. Its range spans the
+    /// album's first and last photo days.
+    public var albumTitle: String?
 
     public init(
         id: UUID,
@@ -47,8 +50,10 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
         missingDateCount: Int,
         invalidDateCount: Int,
         rangeStart: Date? = nil,
-        rangeEnd: Date? = nil
+        rangeEnd: Date? = nil,
+        albumTitle: String? = nil
     ) {
+        self.albumTitle = albumTitle
         self.rangeStart = rangeStart
         self.rangeEnd = rangeEnd
         self.id = id
@@ -67,9 +72,9 @@ public struct GenerationSnapshot: Codable, Hashable, Sendable {
     public var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? TimeZone(identifier: "UTC")! }
     public var calendar: YearCalendar { YearCalendar(timeZone: timeZone) }
 
-    /// "2025", or for a custom timeline "Mar 3 – Jun 8, 2025".
+    /// "2025", "Mar 3 – Jun 8, 2025" for a custom timeline, or the album's name.
     public var title: String {
-        TimelineTitle.make(year: year, start: rangeStart, end: rangeEnd, timeZone: timeZone)
+        albumTitle ?? TimelineTitle.make(year: year, start: rangeStart, end: rangeEnd, timeZone: timeZone)
     }
 }
 
@@ -98,6 +103,8 @@ public enum SnapshotError: Error, Equatable, Sendable {
     case futureYear(Int)
     /// The custom timeline ends before it starts, or starts after today.
     case invalidRange
+    /// The album has no photos with a capture date (or it no longer exists).
+    case emptyAlbum
 }
 
 public enum SnapshotBuilder {
@@ -175,6 +182,34 @@ public enum SnapshotBuilder {
             id: id, year: calendar.component(.year, from: start), start: start, end: end,
             range: (start, lastDay), cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: assets
         )
+    }
+
+    /// An album: every dated photo in it, whenever it was taken (never after
+    /// `cutoff`). The poster spans the album's first through last photo day.
+    public static func build<S: Sequence>(
+        id: UUID = UUID(),
+        album name: String,
+        cutoff: Date,
+        timeZone: TimeZone,
+        settings: ArtworkSettings,
+        access: LibraryAccess,
+        assets: S
+    ) throws -> GenerationSnapshot where S.Element == LibraryAssetDescriptor {
+        let assets = Array(assets)
+        let dates = assets.compactMap(\.captureDate).filter { $0.timeIntervalSince1970.isFinite && $0 >= earliestValidDate && $0 <= cutoff }
+        guard let first = dates.min(), let last = dates.max() else { throw SnapshotError.emptyAlbum }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let start = calendar.startOfDay(for: first)
+        let lastDay = calendar.startOfDay(for: last)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: lastDay) else { throw SnapshotError.emptyAlbum }
+        var snapshot = collect(
+            id: id, year: calendar.component(.year, from: start), start: start, end: end,
+            range: (start, lastDay), cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: assets
+        )
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        snapshot.albumTitle = trimmed.isEmpty ? "Album" : trimmed
+        return snapshot
     }
 
     private static func collect<S: Sequence>(

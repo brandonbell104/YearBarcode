@@ -36,7 +36,7 @@ struct ArtworkView: View {
         let counts = report.counts
         let settings = session.artwork.settings
         VStack(spacing: 0) {
-            NavHeader(backTitle: "Years", title: report.snapshot.rangeStart == nil ? report.snapshot.title : "Custom Timeline", onBack: { model.path.removeAll() }) {
+            NavHeader(backTitle: "Years", title: report.snapshot.albumTitle ?? (report.snapshot.rangeStart == nil ? report.snapshot.title : "Custom Timeline"), onBack: { model.path.removeAll() }) {
                 Button {
                     var flipped = settings
                     flipped.orientation = settings.orientation == .landscape ? .portrait : .landscape

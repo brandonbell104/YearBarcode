@@ -8,8 +8,11 @@ struct YearsView: View {
     @State private var settings = ArtworkSettings.default
     @State private var isGenerating = false
     @State private var showSettings = false
-    /// Custom timeline: pick any first and last day instead of a year.
-    @State private var customSelected = false
+    /// What the poster covers: a year card, a custom timeline, or an album.
+    private enum Source { case year, custom, album }
+    @State private var source: Source = .year
+    @State private var selectedAlbumID: String?
+    @State private var showAllAlbums = false
     @State private var rangeStart = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var rangeEnd = Date()
     @State private var rangeCount: Int?
@@ -56,7 +59,7 @@ struct YearsView: View {
                         Text("Choose a year")
                             .font(.system(size: 34, weight: .heavy))
                             .tracking(-0.8)
-                        Text("From the capture dates in your library")
+                        Text("Or any days, or an album from Photos")
                             .font(.system(size: 15))
                             .foregroundStyle(Theme.secondaryText)
                     }
@@ -70,7 +73,8 @@ struct YearsView: View {
                     yearCards.padding(.top, 18)
 
                     VStack(alignment: .leading, spacing: 22) {
-                        if customSelected { customRangeSection }
+                        if source == .custom { customRangeSection }
+                        if source == .album { albumSection }
                         styleSection
                         orientationSection
                         Text("Mode, print size, border and wallpaper can be changed after generating.")
@@ -106,8 +110,13 @@ struct YearsView: View {
     private var yearCards: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                CustomTimelineCard(selected: customSelected, count: customSelected ? rangeCount : nil)
-                    .onTapGesture { withAnimation(.snappy) { customSelected = true } }
+                CustomTimelineCard(selected: source == .custom, count: source == .custom ? rangeCount : nil)
+                    .onTapGesture { withAnimation(.snappy) { source = .custom } }
+                AlbumSourceCard(selected: source == .album, album: source == .album ? selectedAlbum : nil)
+                    .onTapGesture {
+                        withAnimation(.snappy) { source = .album }
+                        Task { await model.refreshAlbums() }
+                    }
                 if model.isLoadingYears && model.years.isEmpty {
                     ProgressView().tint(Theme.tertiaryText).frame(width: 148, height: 180)
                 } else if model.years.isEmpty {
@@ -123,11 +132,11 @@ struct YearsView: View {
                         colors: latest == nil ? nil : model.yearBarcodes[year],
                         generated: latest != nil,
                         tag: tag(for: year),
-                        selected: !customSelected && year == selectedYear
+                        selected: source == .year && year == selectedYear
                     )
                     .onTapGesture {
                         withAnimation(.snappy) {
-                            customSelected = false
+                            source = .year
                             selectedYear = year
                         }
                     }
@@ -168,6 +177,57 @@ struct YearsView: View {
             let start = calendar.startOfDay(for: rangeStart)
             let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: rangeEnd)) ?? start
             rangeCount = await Task.detached { library.count(from: start, before: end) }.value
+        }
+    }
+
+    private var selectedAlbum: PhotoAlbum? {
+        model.albums.first { $0.id == selectedAlbumID }
+    }
+
+    private var albumSection: some View {
+        let albums = showAllAlbums ? model.albums : Array(model.albums.prefix(8))
+        return VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("Album", trailing: selectedAlbum.map { ArtworkText.photoCount($0.count) })
+            if model.isLoadingAlbums && model.albums.isEmpty {
+                ProgressView().tint(Theme.tertiaryText).frame(maxWidth: .infinity, minHeight: 80)
+            } else if model.albums.isEmpty {
+                Text("No albums with photos yet. Make one in the Photos app, then come back.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.secondaryText)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(albums.enumerated()), id: \.element.id) { index, album in
+                        if index > 0 { Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, 70) }
+                        AlbumRow(album: album, selected: album.id == selectedAlbumID)
+                            .onTapGesture { selectedAlbumID = album.id }
+                    }
+                    if model.albums.count > 8 {
+                        Rectangle().fill(Theme.hairline).frame(height: 1)
+                        Button(showAllAlbums ? "Show fewer" : "Show all \(model.albums.count) albums") {
+                            withAnimation(.snappy) { showAllAlbums.toggle() }
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                    }
+                }
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+            }
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(Theme.accent)
+                Text("Poster of one person: in Photos, open People, choose them, tap Select, select all, then Add to Album. Pick that album here.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 4)
+        }
+        .onChange(of: model.albums) { _, albums in
+            if let id = selectedAlbumID, !albums.contains(where: { $0.id == id }) { selectedAlbumID = nil }
         }
     }
 
@@ -222,7 +282,29 @@ struct YearsView: View {
 
     @ViewBuilder
     private var generateButton: some View {
-        if customSelected {
+        if source == .album {
+            Button {
+                guard let album = selectedAlbum else { return }
+                isGenerating = true
+                Task {
+                    await model.generate(timeline: .album(id: album.id, title: album.title), settings: settings)
+                    isGenerating = false
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    if isGenerating {
+                        ProgressView().tint(Theme.background)
+                    } else {
+                        Image(systemName: "rectangle.stack")
+                        Text(selectedAlbum.map { "Generate \($0.title)" } ?? "Choose an album")
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .buttonStyle(.primary)
+            .disabled(isGenerating || selectedAlbum == nil)
+            .opacity(selectedAlbum == nil ? 0.5 : 1)
+        } else if source == .custom {
             Button {
                 isGenerating = true
                 Task {
@@ -326,6 +408,100 @@ private struct CustomTimelineCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Custom timeline")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct AlbumSourceCard: View {
+    let selected: Bool
+    let album: PhotoAlbum?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                Theme.control
+                VStack(spacing: 6) {
+                    Image(systemName: "rectangle.stack.badge.person.crop")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                    Text("A person or trip")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+            }
+            .frame(height: 104)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Album")
+                    .font(.system(size: 22, weight: .bold))
+                    .tracking(-0.4)
+                    .foregroundStyle(Theme.primaryText)
+                Text(album?.title ?? "From Photos")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                Text(album.map { ArtworkText.photoCount($0.count) } ?? "Pick an album")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(selected ? Theme.accent : Theme.tertiaryText)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 12, trailing: 8))
+        .frame(width: 148)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(selected ? Theme.accent : .clear, lineWidth: 2))
+        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Album")
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct AlbumRow: View {
+    @Environment(AppModel.self) private var model
+    let album: PhotoAlbum
+    let selected: Bool
+    @State private var cover: UIImage?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Theme.control
+                if let cover {
+                    Image(uiImage: cover).resizable().scaledToFill()
+                } else {
+                    Image(systemName: album.kind == .favorites ? "heart.fill" : "photo.on.rectangle")
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(album.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                Text(ArtworkText.photoCount(album.count) + (album.kind == .shared ? " · Shared" : ""))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 22))
+                .foregroundStyle(selected ? Theme.accent : Theme.tertiaryText)
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 60)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(album.title), \(ArtworkText.photoCount(album.count))")
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .task(id: album.keyAssetID) {
+            guard let id = album.keyAssetID, let asset = model.library.asset(id: id) else { return }
+            cover = await model.library.thumbnail(for: asset, side: 88)
+        }
     }
 }
 

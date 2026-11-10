@@ -17,6 +17,8 @@ enum Timeline: Hashable, Sendable {
     case year(Int)
     /// First and last day, inclusive.
     case range(Date, Date)
+    /// Every dated photo in a Photos album, named after it.
+    case album(id: String, title: String)
 }
 
 actor GenerationEngine {
@@ -56,6 +58,11 @@ actor GenerationEngine {
             let descriptors = library.descriptors(from: start, before: end, cutoff: cutoff)
             snapshot = try SnapshotBuilder.build(
                 from: first, through: last, cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: descriptors
+            )
+        case .album(let id, let title):
+            guard let descriptors = library.descriptors(albumID: id) else { throw SnapshotError.emptyAlbum }
+            snapshot = try SnapshotBuilder.build(
+                album: title, cutoff: cutoff, timeZone: timeZone, settings: settings, access: access, assets: descriptors
             )
         }
         try database.insert(snapshot: snapshot)

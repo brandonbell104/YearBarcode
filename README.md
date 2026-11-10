@@ -64,6 +64,7 @@ CI (`.github/workflows/ci.yml`) runs the core tests on Linux and macOS and build
 | Capture date only; missing/invalid dates skipped and counted; no future years | `SnapshotBuilder`, `availableYears` |
 | Deleted/edited before analysis → unavailable/changed, reported | `GenerationEngine.analyze`, `GenerationCounts` |
 | Every Photo: one stripe per photo, or exactly K groups, never across days, capped proportional allocation, largest remainders with chronological ties | `Grouper.everyPhoto`, `Grouper.allocate`, `Grouper.partition` |
+| Album posters: every dated photo in a chosen Photos album (Favorites, your albums, shared albums), any year, titled with the album's name. Apple doesn't let apps read People, so a person's poster comes from an album made from their People page | `SnapshotBuilder.build(album:)`, `PhotoLibraryService.albums`, `Timeline.album`, `YearsView.albumSection` |
 | Every Day: one equal stripe per day that has photos (changed from the spec: empty days are skipped, not drawn white) | `Grouper.everyDay` |
 | Linear-light averaging with sums and counts | `ColorSum`, `ColorAverager` |
 | Stripe style: Solid (average color) or Squeezed (each photo squeezed into its stripe like a movie barcode, from a 64-band top-to-bottom / left-to-right profile, averaged in linear light per group) | `StripeStyle`, `ColorProfile`, `ProfileSum`, `ScanlineRenderer.stripeProfiles` |
