@@ -44,7 +44,7 @@ const html = (body: string) =>
   });
 
 export default {
-  async fetch(request: Request, env: Env, _ctx?: ExecutionContext, fetcher: typeof fetch = fetch): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx?: ExecutionContext, fetcher: typeof fetch = (input, init) => fetch(input, init)): Promise<Response> {
     const url = new URL(request.url);
     // Keys pasted into dashboards often carry a stray space or line break,
     // which makes them invalid in an HTTP header.

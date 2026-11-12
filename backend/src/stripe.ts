@@ -40,7 +40,7 @@ export function formEncode(value: Record<string, unknown>, prefix = ""): string[
 }
 
 export class Stripe {
-  constructor(private readonly secretKey: string, private readonly fetcher: typeof fetch = fetch) {}
+  constructor(private readonly secretKey: string, private readonly fetcher: typeof fetch = (input, init) => fetch(input, init)) {}
 
   private async call<T>(method: string, path: string, body?: Record<string, unknown>, idempotencyKey?: string): Promise<T> {
     const headers: Record<string, string> = { Authorization: `Bearer ${this.secretKey}` };

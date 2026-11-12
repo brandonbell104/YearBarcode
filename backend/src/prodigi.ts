@@ -27,7 +27,7 @@ export class Prodigi {
   constructor(
     private readonly apiKey: string,
     private readonly baseURL: string,
-    private readonly fetcher: typeof fetch = fetch,
+    private readonly fetcher: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   private async call(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<any> {
