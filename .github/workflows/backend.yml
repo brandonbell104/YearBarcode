@@ -105,7 +105,12 @@ jobs:
 
       - name: Delete poster files 30 days after upload
         continue-on-error: true
-        run: npx wrangler r2 bucket lifecycle add year-barcode-prints delete-old-prints prints/ --expire-days 30 --force
+        run: |
+          if npx wrangler r2 bucket lifecycle list year-barcode-prints 2>&1 | grep -q "delete-old-prints"; then
+            echo "Rule delete-old-prints is already set."
+          else
+            npx wrangler r2 bucket lifecycle add year-barcode-prints delete-old-prints prints/ --expire-days 30 --force
+          fi
 
       - name: Show the Worker URL
         run: npx wrangler deployments list | head -20
