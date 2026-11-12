@@ -63,6 +63,10 @@ targets:
         NSPhotoLibraryUsageDescription: >-
           Year Barcode reads your photos on this iPhone to calculate their average colors.
           Your photo library is not uploaded.
+        # Required because Stripe's payment SDK includes optional card scanning.
+        # The camera is used only if the buyer taps Scan Card while paying for a print.
+        NSCameraUsageDescription: >-
+          Year Barcode uses the camera only if you choose to scan a payment card when ordering a print.
         NSPhotoLibraryAddUsageDescription: >-
           Year Barcode saves your finished poster PNG to your photo library when you tap Save to Photos.
         # Continued-processing tasks are submitted with a unique suffix per run.
