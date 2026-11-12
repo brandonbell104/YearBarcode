@@ -46,15 +46,17 @@ const html = (body: string) =>
 export default {
   async fetch(request: Request, env: Env, _ctx?: ExecutionContext, fetcher: typeof fetch = fetch): Promise<Response> {
     const url = new URL(request.url);
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, fetcher);
-    const prodigi = new Prodigi(env.PRODIGI_API_KEY, env.PRODIGI_BASE_URL, fetcher);
+    // Keys pasted into dashboards often carry a stray space or line break,
+    // which makes them invalid in an HTTP header.
+    const stripe = new Stripe((env.STRIPE_SECRET_KEY ?? "").trim(), fetcher);
+    const prodigi = new Prodigi((env.PRODIGI_API_KEY ?? "").trim(), env.PRODIGI_BASE_URL, fetcher);
     const parts = url.pathname.split("/").filter(Boolean); // ["v1", ...]
 
     try {
       if (request.method === "GET" && url.pathname === "/v1/catalog") return json(publicCatalog());
       if (request.method === "GET" && url.pathname === "/v1/pay") {
         if (!env.STRIPE_PUBLISHABLE_KEY) return error("Payments aren't set up yet.", 503);
-        return html(payPage(env.STRIPE_PUBLISHABLE_KEY));
+        return html(payPage(env.STRIPE_PUBLISHABLE_KEY.trim()));
       }
       if (request.method === "GET" && url.pathname === "/v1/pay/return") return html(returnPage());
       if (request.method === "POST" && url.pathname === "/v1/orders") return await createOrder(request, stripe);
@@ -75,7 +77,8 @@ export default {
         return error(e.status >= 500 ? "A payment or print service is unavailable. Please try again." : e.message, e.status >= 500 ? 502 : 400);
       }
       console.error(e);
-      return error("Something went wrong.", 500);
+      const detail = e instanceof Error ? e.message : String(e);
+      return json({ error: `Something went wrong on the order server (${detail}).` }, 500);
     }
   },
 };
@@ -221,7 +224,7 @@ async function orderStatus(request: Request, stripe: Stripe, prodigi: Prodigi, i
 
 async function stripeWebhook(request: Request, env: Env, stripe: Stripe, prodigi: Prodigi, origin: string): Promise<Response> {
   const payload = await request.text();
-  const valid = await verifyStripeSignature(payload, request.headers.get("Stripe-Signature"), env.STRIPE_WEBHOOK_SECRET);
+  const valid = await verifyStripeSignature(payload, request.headers.get("Stripe-Signature"), (env.STRIPE_WEBHOOK_SECRET ?? "").trim());
   if (!valid) return error("Bad signature.", 400);
 
   const event = JSON.parse(payload) as { type: string; data: { object: PaymentIntent } };

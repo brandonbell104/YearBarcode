@@ -99,6 +99,8 @@ jobs:
         run: |
           for name in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET PRODIGI_API_KEY STRIPE_PUBLISHABLE_KEY; do
             value="${!name}"
+            # Drop spaces and line breaks around pasted keys.
+            value="$(printf '%s' "$value" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
             if [ -n "$value" ]; then
               printf '%s' "$value" | npx wrangler secret put "$name"
             else

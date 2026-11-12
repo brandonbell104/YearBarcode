@@ -95,9 +95,9 @@ struct OrderPrintView: View {
             if let image = session.preview {
                 Image(decorative: image, scale: 1)
                     .resizable()
-                    .aspectRatio(landscape ? aspect : 1 / aspect, contentMode: .fill)
-                    .frame(maxWidth: 240, maxHeight: 240)
-                    .clipped()
+                    // Whole poster, never cropped: fit inside the box at the print's shape.
+                    .aspectRatio(landscape ? aspect : 1 / aspect, contentMode: .fit)
+                    .frame(maxWidth: 280, maxHeight: 240)
                     .padding(kind == .framed ? 9 : 0)
                     .background(kind == .framed ? Color(hex: 0x111111) : .clear)
                     .overlay {
