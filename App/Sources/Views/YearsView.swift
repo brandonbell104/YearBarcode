@@ -5,6 +5,7 @@ import YearBarcodeCore
 struct YearsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedYear: Int?
     @State private var settings = ArtworkSettings.default
     @State private var isGenerating = false
@@ -248,15 +249,22 @@ struct YearsView: View {
                 }
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
             }
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(Theme.accent)
-                Text("In the picker, type the person's name in the search bar (the name you gave them in Photos' People), then tap or drag across their photos. The album is saved to your Photos library too.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text("In the picker, type the person's name in the search bar (the name you gave them in Photos' People) and tap their photos. The album is saved to your Photos library too.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            selectAllInPhotos.padding(.top, 6)
+        }
+        .onChange(of: scenePhase) { old, phase in
+            // Back from Photos: pick up the album that was just made there.
+            guard phase == .active, old != .active, source == .album else { return }
+            let before = Set(model.albums.map(\.id))
+            Task {
+                await model.refreshAlbums()
+                if let added = model.albums.first(where: { !before.contains($0.id) && $0.kind == .mine }) {
+                    selectedAlbumID = added.id
+                }
             }
-            .padding(.top, 4)
         }
         .onChange(of: model.albums) { _, albums in
             if let id = selectedAlbumID, !albums.contains(where: { $0.id == id }) { selectedAlbumID = nil }
@@ -265,7 +273,7 @@ struct YearsView: View {
             isPresented: $showPicker,
             selection: $pickedItems,
             maxSelectionCount: nil,
-            selectionBehavior: .ordered,
+            selectionBehavior: .default,
             matching: .images,
             photoLibrary: .shared()
         )
@@ -291,6 +299,47 @@ struct YearsView: View {
             }
             .presentationDetents([.height(300)])
         }
+    }
+
+    /// Photos' People page can Select All, which the picker can't.
+    private var selectAllInPhotos: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Lots of photos? Select them all in Photos")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.primaryText)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array([
+                    "Open Photos, then Collections → People & Pets → the person.",
+                    "Tap Select, then Select All.",
+                    "Tap ⋯ (or Share) → Add to Album → New Album, and name it.",
+                    "Come back here. The new album is picked for you.",
+                ].enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(index + 1)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Theme.background)
+                            .frame(width: 20, height: 20)
+                            .background(Theme.accent, in: Circle())
+                        Text(step)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            Button {
+                if let url = URL(string: "photos-redirect://") {
+                    openURL(url) { opened in
+                        if !opened { model.alert = "Open the Photos app from your Home Screen, then come back." }
+                    }
+                }
+            } label: {
+                Label("Open Photos", systemImage: "arrow.up.forward.app")
+            }
+            .buttonStyle(.secondary)
+        }
+        .padding(14)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func tag(for year: Int) -> String? {
