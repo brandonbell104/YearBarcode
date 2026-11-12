@@ -15,4 +15,4 @@ bucket_name = "year-barcode-prints"
 PRODIGI_BASE_URL = "https://api.sandbox.prodigi.com/v4.0"
 
 # Secrets (set by the deploy workflow from GitHub secrets, never committed):
-#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PRODIGI_API_KEY, ASSET_SIGNING_KEY
+#   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PUBLISHABLE_KEY, PRODIGI_API_KEY, ASSET_SIGNING_KEY

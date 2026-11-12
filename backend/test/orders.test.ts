@@ -93,6 +93,7 @@ const env = (r2: FakeR2): Env => ({
   PRODIGI_BASE_URL: "https://api.sandbox.prodigi.com/v4.0",
   STRIPE_SECRET_KEY: "sk_test_x",
   STRIPE_WEBHOOK_SECRET: "whsec_test",
+  STRIPE_PUBLISHABLE_KEY: "pk_test_x",
   PRODIGI_API_KEY: "prodigi_test",
   ASSET_SIGNING_KEY: "asset-secret",
 });
@@ -180,6 +181,16 @@ describe("order flow", () => {
     const key = services.intents.get(orderId).metadata.image_object;
     expect(key).toMatch(/^prints\/.+\.png$/);
     expect(r2.objects.get(key)?.bytes).toEqual(png);
+
+    // 2b. The hosted payment page gets the client secret only with the token.
+    const payment = (token: string) => call(new Request(`https://orders.example/v1/orders/${orderId}/payment`, { headers: { Authorization: `Bearer ${token}` } }));
+    expect((await payment("wrong")).status).toBe(403);
+    expect(await (await payment(uploadToken)).json()).toMatchObject({ clientSecret, amount: 14900, email: "buyer@example.com", name: "Ada Lovelace" });
+    const page = await call(new Request("https://orders.example/v1/pay"));
+    expect(page.headers.get("Content-Type")).toContain("text/html");
+    const pageText = await page.text();
+    expect(pageText).toContain('"pk_test_x"');
+    expect(pageText).not.toContain("sk_test");
 
     // 3. Payment succeeds → webhook (bad signature refused)
     services.intents.get(orderId).status = "succeeded";

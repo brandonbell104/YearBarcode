@@ -12,12 +12,15 @@ import { findProduct, publicCatalog, CURRENCY, SHIPPING_COUNTRIES, type Product 
 import { randomToken, sha256Hex, safeEqual, signAssetPath, verifyAssetSignature } from "./crypto";
 import { Prodigi, ProdigiError, type Recipient } from "./prodigi";
 import { Stripe, StripeError, verifyStripeSignature, type PaymentIntent } from "./stripe";
+import { payPage, returnPage } from "./paypage";
 
 export interface Env {
   PRINTS: R2Bucket;
   PRODIGI_BASE_URL: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
+  /** Used by the hosted payment page (safe to publish). */
+  STRIPE_PUBLISHABLE_KEY: string;
   PRODIGI_API_KEY: string;
   ASSET_SIGNING_KEY: string;
 }
@@ -30,6 +33,15 @@ const ASSET_LINK_DAYS = 14;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const error = (message: string, status: number) => json({ error: message }, status);
+const html = (body: string) =>
+  new Response(body, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "X-Frame-Options": "DENY",
+    },
+  });
 
 export default {
   async fetch(request: Request, env: Env, _ctx?: ExecutionContext, fetcher: typeof fetch = fetch): Promise<Response> {
@@ -40,12 +52,18 @@ export default {
 
     try {
       if (request.method === "GET" && url.pathname === "/v1/catalog") return json(publicCatalog());
+      if (request.method === "GET" && url.pathname === "/v1/pay") {
+        if (!env.STRIPE_PUBLISHABLE_KEY) return error("Payments aren't set up yet.", 503);
+        return html(payPage(env.STRIPE_PUBLISHABLE_KEY));
+      }
+      if (request.method === "GET" && url.pathname === "/v1/pay/return") return html(returnPage());
       if (request.method === "POST" && url.pathname === "/v1/orders") return await createOrder(request, stripe);
       if (request.method === "POST" && url.pathname === "/v1/stripe/webhook") return await stripeWebhook(request, env, stripe, prodigi, url.origin);
       if (parts[0] === "v1" && parts[1] === "orders" && parts[2]) {
         const id = decodeURIComponent(parts[2]);
         if (request.method === "PUT" && parts[3] === "image" && parts.length === 4) return await uploadImage(request, env, stripe, id);
         if (request.method === "GET" && parts.length === 3) return await orderStatus(request, stripe, prodigi, id);
+        if (request.method === "GET" && parts[3] === "payment" && parts.length === 4) return await paymentDetails(request, stripe, id);
       }
       if (request.method === "GET" && parts[0] === "v1" && parts[1] === "assets" && parts.length > 2) {
         return await serveAsset(env, parts.slice(2).join("/"), url);
@@ -165,6 +183,22 @@ async function uploadImage(request: Request, env: Env, stripe: Stripe, id: strin
   await env.PRINTS.put(key, request.body, { httpMetadata: { contentType: type } });
   await stripe.updateMetadata(intent.id, { image_object: key });
   return new Response(null, { status: 204 });
+}
+
+/** What the payment page needs: the client secret, amount and prefill details. */
+async function paymentDetails(request: Request, stripe: Stripe, id: string): Promise<Response> {
+  const intent = await stripe.retrievePaymentIntent(id);
+  if (!(await authorize(request, intent))) return error("Not allowed.", 403);
+  if (!intent.metadata.image_object) return error("The poster hasn't finished uploading. Go back and try again.", 409);
+  return json({
+    clientSecret: intent.client_secret,
+    amount: intent.amount,
+    currency: intent.currency,
+    status: intent.status,
+    product: findProduct(intent.metadata.product_id ?? "")?.title ?? null,
+    email: intent.receipt_email ?? null,
+    name: intent.shipping?.name ?? null,
+  });
 }
 
 async function orderStatus(request: Request, stripe: Stripe, prodigi: Prodigi, id: string): Promise<Response> {

@@ -114,13 +114,11 @@ struct SavedOrder: Codable, Identifiable, Hashable, Sendable {
 }
 
 enum OrderError: LocalizedError {
-    case notConfigured
     case server(String)
     case network
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "Print ordering isn't set up in this build yet."
         case .server(let message): return message
         case .network: return "Couldn't reach the print service. Check your connection and try again."
         }
@@ -132,11 +130,12 @@ final class OrderService: Sendable {
 
     static let baseURL = URL(string: "https://year-barcode-orders.brandonbell104.workers.dev")!
 
-    /// Set at build time from the STRIPE_PUBLISHABLE_KEY build setting.
-    static var publishableKey: String? {
-        guard let key = Bundle.main.object(forInfoDictionaryKey: "StripePublishableKey") as? String,
-              key.hasPrefix("pk_") else { return nil }
-        return key
+    /// The secure payment page (Stripe's Payment Element) for an order. The
+    /// token travels in the fragment, which browsers never send to servers.
+    static func paymentPageURL(orderID: String, token: String) -> URL {
+        var components = URLComponents(url: baseURL.appendingPathComponent("v1/pay"), resolvingAgainstBaseURL: false)!
+        components.fragment = "order=\(orderID)&token=\(token)"
+        return components.url!
     }
 
     private let decoder = JSONDecoder()

@@ -109,5 +109,5 @@ A Cloudflare Worker that takes print orders: Stripe for payment, Prodigi for pri
 
 ### In the app
 
-Customize → **Order a Print** (`OrderPrintView`): pick product and size, enter a US address, then the app creates the order, renders the poster at the print size without the watermark, uploads it, and opens Stripe's payment sheet (`StripePaymentSheet` via SPM). Orders placed on the phone are listed in Settings → Print Orders with live payment, printing and tracking status. The Stripe publishable key comes from the `STRIPE_PUBLISHABLE_KEY` GitHub secret at TestFlight build time; builds without it show "Print ordering isn't set up".
+Customize → **Order a Print** (`OrderPrintView`): pick product and size, enter a US address, then the app creates the order, renders the poster at the print size without the watermark, uploads it, and opens the server's payment page (`/v1/pay`, Stripe's Payment Element) in an in-app browser sheet (`ASWebAuthenticationSession`), which returns to `yearbarcode://payment`. The app then asks the server whether the order was paid. The app contains no payment SDK and no camera code. Orders placed on the phone are listed in Settings → Print Orders with live payment, printing and tracking status. The deploy copies the `STRIPE_PUBLISHABLE_KEY` GitHub secret into the Worker for the payment page.
 

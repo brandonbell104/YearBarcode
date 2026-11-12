@@ -1,14 +1,17 @@
-import StripePaymentSheet
+import AuthenticationServices
 import SwiftUI
 import YearBarcodeCore
 
 /// Order a printed poster, framed print or canvas of the current artwork.
 ///
 /// Steps: choose product and size → shipping → (create order, render the
-/// full-resolution poster, upload it) → Stripe payment sheet → confirmation.
+/// full-resolution poster, upload it) → secure Stripe payment page in an
+/// in-app browser sheet → confirmation. The app has no payment SDK and no
+/// camera code; card details are entered on Stripe's page.
 struct OrderPrintView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     let session: ArtworkSession
 
     @State private var catalog: PrintCatalog?
@@ -27,8 +30,6 @@ struct OrderPrintView: View {
     @State private var phase: Phase = .choosing
     @State private var errorMessage: String?
     @State private var order: CreatedOrder?
-    @State private var paymentSheet: PaymentSheet?
-    @State private var showingPayment = false
     @State private var showingOrders = false
 
     private var product: PrintProduct? { catalog?.product(kind, size) }
@@ -49,7 +50,7 @@ struct OrderPrintView: View {
                         } else {
                             productSection
                             shippingSection
-                            Text("Price includes shipping within the US. Prints usually ship in 3–5 business days. Payments are handled by Stripe; your card details never touch Year Barcode.")
+                            Text("Price includes shipping within the US. Prints usually ship in 3–5 business days. You'll pay on Stripe's secure page; your card details never touch Year Barcode.")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Theme.tertiaryText)
                         }
@@ -68,11 +69,6 @@ struct OrderPrintView: View {
                     Button(phase == .paid ? "Done" : "Close") { dismiss() }
                         .tint(Theme.accent)
                         .disabled(isWorking)
-                }
-            }
-            .background {
-                if let paymentSheet {
-                    Color.clear.paymentSheet(isPresented: $showingPayment, paymentSheet: paymentSheet, onCompletion: paymentFinished)
                 }
             }
             .sheet(isPresented: $showingOrders) { PrintOrdersView() }
@@ -190,7 +186,7 @@ struct OrderPrintView: View {
                     Button("Start Over") { startOver() }
                         .buttonStyle(.secondary)
                         .frame(maxWidth: 130)
-                    Button { showingPayment = true } label: {
+                    Button { Task { await pay() } } label: {
                         Label("Pay \(order.map { formatPrice($0.amount, currency: $0.currency) } ?? "")", systemImage: "creditcard")
                     }
                     .buttonStyle(.primary)
@@ -246,10 +242,6 @@ struct OrderPrintView: View {
 
     private func loadCatalog() async {
         catalogError = nil
-        guard OrderService.publishableKey != nil else {
-            catalogError = OrderError.notConfigured.localizedDescription
-            return
-        }
         do {
             catalog = try await OrderService.shared.catalog()
         } catch {
@@ -258,7 +250,7 @@ struct OrderPrintView: View {
     }
 
     private func placeOrder() async {
-        guard let product, let key = OrderService.publishableKey else { return }
+        guard let product else { return }
         errorMessage = nil
         let email = email.trimmingCharacters(in: .whitespaces)
         do {
@@ -281,33 +273,45 @@ struct OrderPrintView: View {
             }
             try? FileManager.default.removeItem(at: file)
 
-            STPAPIClient.shared.publishableKey = key
-            var configuration = PaymentSheet.Configuration()
-            configuration.merchantDisplayName = "Year Barcode"
-            configuration.returnURL = "yearbarcode://stripe-redirect"
-            configuration.defaultBillingDetails.email = email
-            configuration.defaultBillingDetails.name = address.name
-            configuration.allowsDelayedPaymentMethods = false
-            paymentSheet = PaymentSheet(paymentIntentClientSecret: created.clientSecret, configuration: configuration)
             phase = .readyToPay
-            showingPayment = true
         } catch {
             errorMessage = error.localizedDescription
             // Nothing was paid: forget the half-made order and let them try again.
             if let order { OrderStore.remove(order.orderId) }
             order = nil
             phase = .choosing
+            return
         }
+        await pay()
     }
 
-    private func paymentFinished(_ result: PaymentSheetResult) {
-        switch result {
-        case .completed:
+    /// Opens Stripe's payment page; afterwards asks the server whether it was paid.
+    private func pay() async {
+        guard let order else { return }
+        errorMessage = nil
+        do {
+            _ = try await webAuthenticationSession.authenticate(
+                using: OrderService.paymentPageURL(orderID: order.orderId, token: order.uploadToken),
+                callbackURLScheme: "yearbarcode",
+                preferredBrowserSession: .ephemeral
+            )
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            // Closed the page without paying; they can tap Pay again.
+        } catch {
+            errorMessage = "The payment page couldn't open. Try again."
+        }
+        await refreshPayment()
+    }
+
+    /// The page's own result is never trusted; the server says whether Stripe was paid.
+    private func refreshPayment() async {
+        guard let order else { return }
+        phase = .working("Checking your payment…", nil)
+        let saved = SavedOrder(id: order.orderId, uploadToken: order.uploadToken, productTitle: "", posterTitle: "", amount: order.amount, createdAt: Date())
+        if let status = try? await OrderService.shared.status(of: saved),
+           status.payment == "succeeded" || status.payment == "processing" {
             phase = .paid
-        case .canceled:
-            phase = .readyToPay
-        case .failed(let error):
-            errorMessage = error.localizedDescription
+        } else {
             phase = .readyToPay
         }
     }
@@ -315,7 +319,6 @@ struct OrderPrintView: View {
     private func startOver() {
         if let order { OrderStore.remove(order.orderId) }
         order = nil
-        paymentSheet = nil
         errorMessage = nil
         phase = .choosing
     }
