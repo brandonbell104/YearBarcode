@@ -81,7 +81,9 @@ jobs:
           fi
 
       - name: Deploy Worker
-        run: npx wrangler deploy
+        # A brand-new Worker can briefly read as missing right after its first
+        # upload; one retry covers that.
+        run: npx wrangler deploy || { echo "Retrying in 15 seconds..."; sleep 15; npx wrangler deploy; }
 
       - name: Copy service keys into the Worker
         env:
