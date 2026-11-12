@@ -1,5 +1,5 @@
-// Print products offered in the app: a black-framed print and a stretched
-// canvas, each in the three poster sizes.
+// Print products offered in the app: an unframed poster, a black-framed
+// print and a stretched canvas, each in the three poster sizes.
 //
 // To confirm before launch:
 //  * `prodigiSku` and `attributes`: the deploy's "Check Prodigi products"
@@ -8,7 +8,7 @@
 //  * `priceCents`: retail price charged to the customer, shipping included.
 //    Set it from Prodigi's cost + shipping + Stripe fees + margin.
 
-export type ProductKind = "framed" | "canvas";
+export type ProductKind = "poster" | "framed" | "canvas";
 export type PrintSize = "12x18" | "18x24" | "24x36";
 
 export interface Product {
@@ -29,12 +29,14 @@ export const SHIPPING_COUNTRIES = ["US"];
 
 export const SIZES: PrintSize[] = ["12x18", "18x24", "24x36"];
 
+const POSTER_PRICES: Record<PrintSize, number> = { "12x18": 3900, "18x24": 4900, "24x36": 6900 };
 const FRAMED_PRICES: Record<PrintSize, number> = { "12x18": 9900, "18x24": 13900, "24x36": 18900 };
 const CANVAS_PRICES: Record<PrintSize, number> = { "12x18": 7900, "18x24": 10900, "24x36": 14900 };
 
-/** Prodigi SKUs per kind. Classic frame with a white mount; standard stretched canvas. */
-export const SKU_PREFIX: Record<ProductKind, string> = { framed: "GLOBAL-CFPM", canvas: "GLOBAL-CAN" };
+/** Prodigi SKUs per kind: matte art paper; classic frame with a white mount; standard stretched canvas. */
+export const SKU_PREFIX: Record<ProductKind, string> = { poster: "GLOBAL-FAP", framed: "GLOBAL-CFPM", canvas: "GLOBAL-CAN" };
 export const ATTRIBUTES: Record<ProductKind, Record<string, string>> = {
+  poster: {},
   framed: { color: "black" },
   // Mirror wrap repeats the edge of the image around the sides, so nothing on
   // the front (like the title) gets folded around the frame.
@@ -44,6 +46,15 @@ export const ATTRIBUTES: Record<ProductKind, Record<string, string>> = {
 export const PRODUCTS: Product[] = SIZES.flatMap((size): Product[] => {
   const label = size.replace("x", " × ");
   return [
+    {
+      id: `poster-${size}`,
+      kind: "poster",
+      size,
+      title: `${label} poster`,
+      prodigiSku: `${SKU_PREFIX.poster}-${size.toUpperCase()}`,
+      attributes: ATTRIBUTES.poster,
+      priceCents: POSTER_PRICES[size],
+    },
     {
       id: `framed-black-${size}`,
       kind: "framed",

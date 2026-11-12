@@ -69,7 +69,7 @@ export class Prodigi {
             merchantReference: params.merchantReference,
             sku: params.sku,
             copies: 1,
-            attributes: params.attributes,
+            attributes: params.attributes && Object.keys(params.attributes).length ? params.attributes : undefined,
             sizing: "fillPrintArea",
             assets: [{ printArea: "default", url: params.imageURL }],
           },

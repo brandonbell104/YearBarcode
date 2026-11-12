@@ -61,10 +61,10 @@ for (const product of PRODUCTS) {
 console.log("\nAlternatives (for comparison):");
 const alternatives = SIZES.flatMap((s) => {
   const size = s.toUpperCase();
-  return [`GLOBAL-CFP-${size}`, `GLOBAL-SLIMCAN-${size}`, `GLOBAL-FAP-${size}`];
+  return [`GLOBAL-CFP-${size}`];
 });
 for (const sku of alternatives) {
-  const { line } = await describe(sku, {});
+  const { line } = await describe(sku, { color: "black" });
   console.log(`     ${line}`);
 }
 
