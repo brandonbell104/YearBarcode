@@ -34,6 +34,24 @@ jobs:
             echo "::error::The CLOUDFLARE_API_TOKEN secret is empty or has more than the token in it (a line break or extra text). Create a new token in Cloudflare and paste only the token itself into the GitHub secret."
             exit 1
           fi
+          # Name the usual mix-ups without printing the value.
+          if [ "$token" = "$account" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN holds the account ID. Put the API token there (the long value Cloudflare shows once after you create or roll a token)."
+            exit 1
+          fi
+          if [[ "$token" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN looks like a Token ID (32 hex characters from the token list), not the token itself. In Cloudflare, open API Tokens, click ... next to the token, Roll, and copy the value shown in the box."
+            exit 1
+          fi
+          if [[ "$token" =~ ^[0-9a-f]{37}$ ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN looks like the Global API Key. Use an API token instead (API Tokens, Create Token, Edit Cloudflare Workers template)."
+            exit 1
+          fi
+          if ! [[ "$token" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN has characters a token never contains (quotes, punctuation or letters from a different keyboard). Copy it again with the copy button and paste only the value."
+            exit 1
+          fi
+          echo "Token: ${#token} characters, letters/numbers/-/_ only."
           if ! [[ "$account" =~ ^[0-9a-f]{32}$ ]]; then
             echo "::error::The CLOUDFLARE_ACCOUNT_ID secret doesn't look like an account ID (32 letters and numbers, from the Workers & Pages overview page)."
             exit 1
