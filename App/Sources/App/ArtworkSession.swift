@@ -139,6 +139,16 @@ final class ArtworkSession {
                             design: artwork.design, showWatermark: showWatermark)
     }
 
+    /// Preview for the order screen: what gets printed, so never a watermark.
+    func printPreview() async -> CGImage? {
+        guard var input else { return nil }
+        input.showWatermark = false
+        input.settings.wallpaper = nil
+        let images = borderImages
+        let frozen = input
+        return await Task.detached(priority: .userInitiated) { ArtworkRenderer.preview(frozen, borderImages: images) }.value
+    }
+
     /// Full-resolution PNG for a print order: the chosen print size (never a
     /// wallpaper) and no watermark, since the print itself is paid for.
     func exportForPrint(size: PrintSize, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {

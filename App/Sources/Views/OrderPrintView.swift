@@ -30,6 +30,8 @@ struct OrderPrintView: View {
     @State private var errorMessage: String?
     @State private var order: CreatedOrder?
     @State private var showingOrders = false
+    /// Watermark-free preview of what gets printed.
+    @State private var printImage: CGImage?
 
     /// Fixed: the size the poster was customized at.
     private var size: PrintSize { session.artwork.settings.printSize }
@@ -76,6 +78,7 @@ struct OrderPrintView: View {
         }
         .interactiveDismissDisabled(isWorking)
         .task {
+            printImage = await session.printPreview()
             await loadCatalog()
         }
     }
@@ -92,7 +95,7 @@ struct OrderPrintView: View {
         let aspect = Double(size.longInches) / Double(size.shortInches)
         return ZStack {
             Theme.posterWell
-            if let image = session.preview {
+            if let image = printImage {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     // Whole poster, never cropped: fit inside the box at the print's shape.
