@@ -4,7 +4,7 @@ import YearBarcodeCore
 
 /// Order a printed poster, framed print or canvas of the current artwork.
 ///
-/// Steps: choose product and size → shipping → (create order, render the
+/// The print size is the one chosen in Customize. Steps: choose product → shipping → (create order, render the
 /// full-resolution poster, upload it) → secure Stripe payment page in an
 /// in-app browser sheet → confirmation. The app has no payment SDK and no
 /// camera code; card details are entered on Stripe's page.
@@ -17,7 +17,6 @@ struct OrderPrintView: View {
     @State private var catalog: PrintCatalog?
     @State private var catalogError: String?
     @State private var kind: PrintKind = .framed
-    @State private var size: PrintSize = .size18x24
     @AppStorage("printOrderEmail") private var email = ""
     @State private var address = ShippingAddress()
 
@@ -32,6 +31,8 @@ struct OrderPrintView: View {
     @State private var order: CreatedOrder?
     @State private var showingOrders = false
 
+    /// Fixed: the size the poster was customized at.
+    private var size: PrintSize { session.artwork.settings.printSize }
     private var product: PrintProduct? { catalog?.product(kind, size) }
     private var locked: Bool { order != nil }
 
@@ -75,7 +76,6 @@ struct OrderPrintView: View {
         }
         .interactiveDismissDisabled(isWorking)
         .task {
-            size = session.artwork.settings.printSize
             await loadCatalog()
         }
     }
@@ -118,8 +118,18 @@ struct OrderPrintView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("Print", trailing: product.map { formatPrice($0.priceCents, currency: catalog?.currency ?? "usd") })
             PillSegmented(options: PrintKind.allCases.map { ($0, $0.title) }, selection: $kind)
-            PillSegmented(options: PrintSize.allCases.map { ($0, $0.catalogKey.replacingOccurrences(of: "x", with: " × ")) }, selection: $size)
-            Text(kind.detail + (size == session.artwork.settings.printSize ? "" : " The poster is redrawn at this size."))
+            HStack(spacing: 8) {
+                Image(systemName: "ruler")
+                Text("\(size.shortInches) × \(size.longInches) in, \(session.artwork.settings.orientation == .landscape ? "landscape" : "portrait")")
+                Spacer()
+                Text("Change size in Customize").foregroundStyle(Theme.tertiaryText)
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Theme.secondaryText)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 38)
+            .background(Theme.control, in: RoundedRectangle(cornerRadius: 12))
+            Text(kind.detail)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

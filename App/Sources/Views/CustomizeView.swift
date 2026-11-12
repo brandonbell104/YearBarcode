@@ -339,9 +339,10 @@ struct CustomizeView: View {
                     .buttonStyle(.secondary)
                 }
                 Button { orderingPrint = true } label: {
-                    Label("Order a Print", systemImage: "shippingbox")
+                    Label(session.artwork.settings.wallpaper == nil ? "Order a Print" : "Pick a print size to order a print", systemImage: "shippingbox")
                 }
                 .buttonStyle(.secondary(Theme.accent))
+                .disabled(session.artwork.settings.wallpaper != nil)
                 .sheet(isPresented: $orderingPrint) { OrderPrintView(session: session) }
             }
             switch session.exportState {
