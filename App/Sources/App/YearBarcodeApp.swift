@@ -1,3 +1,4 @@
+import StripePaymentSheet
 import SwiftUI
 
 @main
@@ -13,6 +14,8 @@ struct YearBarcodeApp: App {
                 .preferredColorScheme((Appearance(rawValue: appearance) ?? .dark).colorScheme)
                 .tint(Theme.accent)
                 .task { await model.onLaunch() }
+                // Bank and wallet payments return here after leaving the app.
+                .onOpenURL { url in _ = StripeAPI.handleURLCallback(with: url) }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.onForeground() } }
                 }

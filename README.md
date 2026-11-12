@@ -1,6 +1,6 @@
 # Year Barcode
 
-**Your year, in color.** Year Barcode turns the average color of every photo you took in a year into printable barcode art. Analysis, filtering, preview and PNG export all happen on the phone. There are no accounts, no uploads, and no servers.
+**Your year, in color.** Year Barcode turns the average color of every photo you took in a year into printable barcode art. Analysis, filtering, preview and PNG export all happen on the phone. There are no accounts; the only upload is a poster the user orders as a print.
 
 This repository implements the **V1 specification (October 9, 2026)** for iPhone: steps 1–5 of the spec's implementation order. The Android port (step 6) is not started; it should reuse the same logical rules from `YearBarcodeCore`.
 
@@ -105,5 +105,9 @@ A Cloudflare Worker that takes print orders: Stripe for payment, Prodigi for pri
 
 - `npm test` runs the order-flow tests against fake Stripe/Prodigi services.
 - `.github/workflows/backend.yml` deploys on every push to `backend/` and copies `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `PRODIGI_API_KEY` from GitHub secrets into the Worker.
-- Products, Prodigi SKUs and prices in `backend/src/catalog.ts` are placeholders until confirmed.
+- Products: unframed poster (GLOBAL-FAP), black frame without a mat (GLOBAL-CFP, color=black) and stretched canvas (GLOBAL-CAN, wrap=MirrorWrap), each 12×18, 18×24, 24×36, US shipping included. The deploy asks Prodigi to confirm every SKU and prints its cost (`scripts/check-prodigi.ts`).
+
+### In the app
+
+Customize → **Order a Print** (`OrderPrintView`): pick product and size, enter a US address, then the app creates the order, renders the poster at the print size without the watermark, uploads it, and opens Stripe's payment sheet (`StripePaymentSheet` via SPM). Orders placed on the phone are listed in Settings → Print Orders with live payment, printing and tracking status. The Stripe publishable key comes from the `STRIPE_PUBLISHABLE_KEY` GitHub secret at TestFlight build time; builds without it show "Print ordering isn't set up".
 

@@ -139,6 +139,25 @@ final class ArtworkSession {
                             design: artwork.design, showWatermark: showWatermark)
     }
 
+    /// Full-resolution PNG for a print order: the chosen print size (never a
+    /// wallpaper) and no watermark, since the print itself is paid for.
+    func exportForPrint(size: PrintSize, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        guard let report else { throw OrderError.server("The poster isn't ready yet.") }
+        var settings = artwork.settings
+        settings.printSize = size
+        settings.wallpaper = nil
+        let title = report.snapshot.title
+        let design = artwork.design
+        let barcode = await Task.detached(priority: .userInitiated) { report.barcode(for: settings) }.value
+        let input = ArtworkInput(title: title, settings: settings, barcode: barcode, design: design, showWatermark: false)
+        do {
+            return try await ArtworkRenderer.exportPNG(input, library: model.library, progress: progress)
+        } catch BorderPhotoError.unavailable(let assetID) {
+            replacementNeeded = assetID
+            throw BorderPhotoError.unavailable(assetID: assetID)
+        }
+    }
+
     /// Full-resolution PNG, generated only on Save or Share.
     func export(_ purpose: ExportPurpose) async {
         guard let input else { return }

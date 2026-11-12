@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.dark.rawValue
+    @State private var showingOrders = false
 
     var body: some View {
         let purchases = model.purchases
@@ -93,10 +94,29 @@ struct SettingsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel("Prints")
+                        Button { showingOrders = true } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "shippingbox")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundStyle(Theme.accent)
+                                    .frame(width: 40, height: 40)
+                                    .background(Theme.control, in: RoundedRectangle(cornerRadius: 12))
+                                Text("Print Orders").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.primaryText)
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(Theme.tertiaryText)
+                            }
+                            .padding(14)
+                            .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
                         SectionLabel("Privacy")
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "lock").foregroundStyle(Theme.primaryText)
-                            Text("Your photos are analyzed on your iPhone. Your photo library is never uploaded.")
+                            Text("Your photos are analyzed on your iPhone. Your photo library is never uploaded; only a poster you order as a print is sent, to print it.")
                                 .font(.system(size: 14))
                                 .foregroundStyle(Theme.bodyText)
                         }
@@ -121,6 +141,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingOrders) { PrintOrdersView() }
         .preferredColorScheme((Appearance(rawValue: appearance) ?? .dark).colorScheme)
     }
 

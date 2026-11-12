@@ -10,6 +10,9 @@ options:
 packages:
   YearBarcodeCore:
     path: Packages/YearBarcodeCore
+  Stripe:
+    url: https://github.com/stripe/stripe-ios-spm
+    from: 24.0.0
 
 settings:
   base:
@@ -26,6 +29,8 @@ targets:
       - path: App/Assets.xcassets
     dependencies:
       - package: YearBarcodeCore
+      - package: Stripe
+        product: StripePaymentSheet
       - sdk: libsqlite3.tbd
     settings:
       base:
@@ -33,6 +38,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
+        # Stripe test/live publishable key; the TestFlight workflow passes it in.
+        STRIPE_PUBLISHABLE_KEY: ""
     info:
       path: App/Info.plist
       properties:
@@ -41,6 +48,12 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
+        StripePublishableKey: $(STRIPE_PUBLISHABLE_KEY)
+        # Return address for payment methods that leave the app (banks, wallets).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.yearbarcode.app.stripe
+            CFBundleURLSchemes:
+              - yearbarcode
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSceneManifest:

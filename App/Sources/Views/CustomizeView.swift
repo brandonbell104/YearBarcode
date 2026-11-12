@@ -9,6 +9,7 @@ struct CustomizeView: View {
     @State private var editing = false
     @State private var showPhotoPicker = false
     @State private var viewingFullScreen = false
+    @State private var orderingPrint = false
 
     var body: some View {
         Group {
@@ -337,6 +338,11 @@ struct CustomizeView: View {
                     }
                     .buttonStyle(.secondary)
                 }
+                Button { orderingPrint = true } label: {
+                    Label("Order a Print", systemImage: "shippingbox")
+                }
+                .buttonStyle(.secondary(Theme.accent))
+                .sheet(isPresented: $orderingPrint) { OrderPrintView(session: session) }
             }
             switch session.exportState {
             case .savedToPhotos:
