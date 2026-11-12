@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import YearBarcodeCore
 
@@ -13,6 +14,12 @@ struct YearsView: View {
     @State private var source: Source = .year
     @State private var selectedAlbumID: String?
     @State private var showAllAlbums = false
+    /// New album in-app: pick photos (search a person's name), then name it.
+    @State private var showPicker = false
+    @State private var pickedItems: [PhotosPickerItem] = []
+    @State private var pickedIDs: [String] = []
+    @State private var showNameSheet = false
+    @State private var newAlbumName = ""
     @State private var rangeStart = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var rangeEnd = Date()
     @State private var rangeCount: Int?
@@ -188,10 +195,35 @@ struct YearsView: View {
         let albums = showAllAlbums ? model.albums : Array(model.albums.prefix(8))
         return VStack(alignment: .leading, spacing: 8) {
             SectionLabel("Album", trailing: selectedAlbum.map { ArtworkText.photoCount($0.count) })
+            Button { showPicker = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.crop.square.badge.plus")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 44, height: 44)
+                        .background(Theme.control, in: RoundedRectangle(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("New Album of a Person")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.primaryText)
+                        Text("Search their name and select their photos")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 64)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(.plain)
             if model.isLoadingAlbums && model.albums.isEmpty {
                 ProgressView().tint(Theme.tertiaryText).frame(maxWidth: .infinity, minHeight: 80)
             } else if model.albums.isEmpty {
-                Text("No albums with photos yet. Make one in the Photos app, then come back.")
+                Text("No albums with photos yet.")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.secondaryText)
                     .padding(14)
@@ -219,7 +251,7 @@ struct YearsView: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(Theme.accent)
-                Text("Poster of one person: in Photos, open People, choose them, tap Select, select all, then Add to Album. Pick that album here.")
+                Text("In the picker, type the person's name in the search bar (the name you gave them in Photos' People), then tap or drag across their photos. The album is saved to your Photos library too.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -228,6 +260,36 @@ struct YearsView: View {
         }
         .onChange(of: model.albums) { _, albums in
             if let id = selectedAlbumID, !albums.contains(where: { $0.id == id }) { selectedAlbumID = nil }
+        }
+        .photosPicker(
+            isPresented: $showPicker,
+            selection: $pickedItems,
+            maxSelectionCount: nil,
+            selectionBehavior: .ordered,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: pickedItems) { _, items in
+            guard !items.isEmpty else { return }
+            pickedIDs = items.compactMap(\.itemIdentifier)
+            pickedItems = []
+            if pickedIDs.isEmpty {
+                model.alert = "Couldn't read those photos. Try again."
+            } else {
+                newAlbumName = ""
+                showNameSheet = true
+            }
+        }
+        .sheet(isPresented: $showNameSheet) {
+            NewAlbumSheet(count: pickedIDs.count, name: $newAlbumName) {
+                let album = await model.createAlbum(named: newAlbumName, assetIDs: pickedIDs)
+                if let album {
+                    selectedAlbumID = album.id
+                    showNameSheet = false
+                }
+                return album != nil
+            }
+            .presentationDetents([.height(300)])
         }
     }
 
@@ -455,6 +517,52 @@ private struct AlbumSourceCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Album")
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+private struct NewAlbumSheet: View {
+    let count: Int
+    @Binding var name: String
+    /// Creates the album; returns whether it worked.
+    let create: () async -> Bool
+    @State private var isCreating = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Name the album")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(Theme.primaryText)
+            Text("\(ArtworkText.photoCount(count)) selected. The name becomes the poster's title.")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.secondaryText)
+            TextField("e.g. Emma", text: $name)
+                .font(.system(size: 17))
+                .padding(.horizontal, 14)
+                .frame(minHeight: 50)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 14))
+                .focused($focused)
+                .submitLabel(.done)
+                .onSubmit(save)
+            Button(action: save) {
+                if isCreating { ProgressView().tint(Theme.background) } else { Text("Create Album") }
+            }
+            .buttonStyle(.primary)
+            .disabled(isCreating || name.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(24)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Theme.background.ignoresSafeArea())
+        .onAppear { focused = true }
+    }
+
+    private func save() {
+        guard !isCreating, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        isCreating = true
+        Task {
+            _ = await create()
+            isCreating = false
+        }
     }
 }
 

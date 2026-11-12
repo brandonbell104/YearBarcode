@@ -37,7 +37,8 @@ enum ImageRequestError: Error {
     case downloadFailed(Error?)
 }
 
-/// PhotoKit adapter. Reads only; never modifies or deletes library items.
+/// PhotoKit adapter. Never modifies or deletes photos; the only write is
+/// creating an album when the user asks for one.
 final class PhotoLibraryService: @unchecked Sendable {
     private let imageManager = PHImageManager.default()
 
@@ -139,6 +140,33 @@ final class PhotoLibraryService: @unchecked Sendable {
                 ? $0.kind.rawValue < $1.kind.rawValue
                 : $0.title.localizedStandardCompare($1.title) == .orderedAscending
         }
+    }
+
+    /// Creates a Photos album holding these photos (in the order given) and
+    /// returns it. Only called when the user taps Create Album.
+    func createAlbum(named title: String, assetIDs: [String]) async throws -> PhotoAlbum {
+        let fetched = PHAsset.fetchAssets(withLocalIdentifiers: assetIDs, options: nil)
+        var byID: [String: PHAsset] = [:]
+        fetched.enumerateObjects { asset, _, _ in byID[asset.localIdentifier] = asset }
+        let assets = assetIDs.compactMap { byID[$0] }
+        guard !assets.isEmpty else { throw AlbumError.noAccessiblePhotos }
+
+        final class Box: @unchecked Sendable { var id: String? }
+        let box = Box()
+        try await PHPhotoLibrary.shared().performChanges {
+            let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: title)
+            request.addAssets(assets as NSArray)
+            box.id = request.placeholderForCreatedAssetCollection.localIdentifier
+        }
+        guard let id = box.id else { throw AlbumError.notCreated }
+        let stills = assets.filter { $0.mediaType == .image }.count
+        return PhotoAlbum(id: id, title: title, count: stills, kind: .mine, keyAssetID: assets.first?.localIdentifier)
+    }
+
+    enum AlbumError: Error {
+        /// The picked photos can't be read (for example, limited access).
+        case noAccessiblePhotos
+        case notCreated
     }
 
     /// Every accessible still image in the album (dated or not, so undated

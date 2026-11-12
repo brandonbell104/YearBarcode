@@ -93,6 +93,28 @@ final class AppModel {
         isLoadingAlbums = false
     }
 
+    /// Saves picked photos as a new album in Photos and returns it.
+    func createAlbum(named name: String, assetIDs: [String]) async -> PhotoAlbum? {
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let album = try await library.createAlbum(named: title.isEmpty ? "Year Barcode" : title, assetIDs: assetIDs)
+            await refreshAlbums()
+            return listed(album)
+        } catch PhotoLibraryService.AlbumError.noAccessiblePhotos {
+            alert = authorization == .limited
+                ? "Year Barcode can only see the photos you've allowed. Allow access to all photos in Settings, or add these photos to the allowed ones."
+                : "Those photos couldn't be found."
+        } catch {
+            alert = "Couldn't create the album: \(error.localizedDescription)"
+        }
+        return nil
+    }
+
+    /// The listed version of a new album (with its real count), if the list has it.
+    private func listed(_ album: PhotoAlbum) -> PhotoAlbum {
+        albums.first { $0.id == album.id } ?? album
+    }
+
     /// The most recent finished poster for a year, if any.
     func latestFinished(year: Int) -> GenerationRecord? {
         generations.first { $0.year == year && $0.status == .finished && !$0.isCustomTimeline }
