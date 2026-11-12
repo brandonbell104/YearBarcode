@@ -68,6 +68,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+      - name: Create the poster storage bucket (first deploy only)
+        run: |
+          if npx wrangler r2 bucket list 2>&1 | grep -q "year-barcode-prints"; then
+            echo "Bucket year-barcode-prints exists."
+          elif ! out=$(npx wrangler r2 bucket create year-barcode-prints 2>&1); then
+            echo "$out"
+            echo "::error::Couldn't create the R2 bucket. In Cloudflare, open R2 Object Storage and turn it on (it asks you to accept the R2 plan; the free tier covers this app), and make sure the API token has Account → Workers R2 Storage → Edit. Then run this workflow again."
+            exit 1
+          else
+            echo "Created bucket year-barcode-prints."
+          fi
+
       - name: Deploy Worker
         run: npx wrangler deploy
 
