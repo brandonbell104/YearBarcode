@@ -33,8 +33,9 @@ const POSTER_PRICES: Record<PrintSize, number> = { "12x18": 3900, "18x24": 4900,
 const FRAMED_PRICES: Record<PrintSize, number> = { "12x18": 9900, "18x24": 13900, "24x36": 18900 };
 const CANVAS_PRICES: Record<PrintSize, number> = { "12x18": 7900, "18x24": 10900, "24x36": 14900 };
 
-/** Prodigi SKUs per kind: matte art paper; classic frame with a white mount; standard stretched canvas. */
-export const SKU_PREFIX: Record<ProductKind, string> = { poster: "GLOBAL-FAP", framed: "GLOBAL-CFPM", canvas: "GLOBAL-CAN" };
+/** Prodigi SKUs per kind: matte art paper; classic frame with no mat (the whole
+ *  poster shows; a mat would crop its edges); standard stretched canvas. */
+export const SKU_PREFIX: Record<ProductKind, string> = { poster: "GLOBAL-FAP", framed: "GLOBAL-CFP", canvas: "GLOBAL-CAN" };
 export const ATTRIBUTES: Record<ProductKind, Record<string, string>> = {
   poster: {},
   framed: { color: "black" },

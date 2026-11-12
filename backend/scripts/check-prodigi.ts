@@ -5,7 +5,7 @@
 // Run: PRODIGI_API_KEY=... npx tsx scripts/check-prodigi.ts
 // Exits 1 if a catalog product's SKU or attribute is rejected by Prodigi.
 
-import { PRODUCTS, SIZES } from "../src/catalog";
+import { PRODUCTS } from "../src/catalog";
 
 const BASE = process.env.PRODIGI_BASE_URL ?? "https://api.sandbox.prodigi.com/v4.0";
 const KEY = process.env.PRODIGI_API_KEY;
@@ -56,16 +56,6 @@ for (const product of PRODUCTS) {
   const { ok, line } = await describe(product.prodigiSku, product.attributes);
   if (!ok) failed = true;
   console.log(`${ok ? "OK  " : "FAIL"} ${product.id} -> ${line}`);
-}
-
-console.log("\nAlternatives (for comparison):");
-const alternatives = SIZES.flatMap((s) => {
-  const size = s.toUpperCase();
-  return [`GLOBAL-CFP-${size}`];
-});
-for (const sku of alternatives) {
-  const { line } = await describe(sku, { color: "black" });
-  console.log(`     ${line}`);
 }
 
 if (failed) {
