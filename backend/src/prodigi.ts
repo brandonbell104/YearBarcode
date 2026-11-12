@@ -44,7 +44,7 @@ export class Prodigi {
   }
 
   /** One print, shipped to the customer. `merchantReference` is our order ID. */
-  async createOrder(params: { merchantReference: string; sku: string; imageURL: string; recipient: Recipient }): Promise<string> {
+  async createOrder(params: { merchantReference: string; sku: string; attributes?: Record<string, string>; imageURL: string; recipient: Recipient }): Promise<string> {
     const r = params.recipient;
     const json = await this.call(
       "POST",
@@ -69,6 +69,7 @@ export class Prodigi {
             merchantReference: params.merchantReference,
             sku: params.sku,
             copies: 1,
+            attributes: params.attributes,
             sizing: "fillPrintArea",
             assets: [{ printArea: "default", url: params.imageURL }],
           },

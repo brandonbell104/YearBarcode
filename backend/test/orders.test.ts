@@ -98,7 +98,7 @@ const env = (r2: FakeR2): Env => ({
 });
 
 const order = {
-  productId: "poster-24x36",
+  productId: "canvas-24x36",
   email: "buyer@example.com",
   recipient: { name: "Ada Lovelace", line1: "1 Main St", city: "Springfield", state: "IL", postalCode: "62701", country: "US" },
 };
@@ -166,7 +166,7 @@ describe("order flow", () => {
     expect(created.status).toBe(201);
     const { orderId, clientSecret, uploadToken, amount } = (await created.json()) as any;
     expect(clientSecret).toBe(`${orderId}_secret`);
-    expect(amount).toBe(6900);
+    expect(amount).toBe(14900);
     expect(services.intents.get(orderId).metadata.upload_token_hash).toBeTruthy();
     expect(JSON.stringify(services.intents.get(orderId))).not.toContain(uploadToken);
 
@@ -190,7 +190,8 @@ describe("order flow", () => {
     expect(services.prodigiOrders).toHaveLength(1);
     const sent = services.prodigiOrders[0].request;
     expect(sent.merchantReference).toBe(orderId);
-    expect(sent.items[0].sku).toBe("GLOBAL-FAP-24X36");
+    expect(sent.items[0].sku).toBe("GLOBAL-CAN-24X36");
+    expect(sent.items[0].attributes).toEqual({ wrap: "MirrorWrap" });
     expect(sent.recipient.address).toMatchObject({ line1: "1 Main St", stateOrCounty: "IL", countryCode: "US" });
     expect(services.intents.get(orderId).metadata.prodigi_order_id).toBe("ord_1");
 

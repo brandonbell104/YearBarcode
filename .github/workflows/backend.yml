@@ -68,6 +68,11 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+      - name: Check Prodigi products and costs
+        env:
+          PRODIGI_API_KEY: ${{ secrets.PRODIGI_API_KEY }}
+        run: npx tsx scripts/check-prodigi.ts
+
       - name: Create the poster storage bucket (first deploy only)
         run: |
           if npx wrangler r2 bucket list 2>&1 | grep -q "year-barcode-prints"; then

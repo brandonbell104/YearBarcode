@@ -215,6 +215,7 @@ export async function fulfill(intent: PaymentIntent, env: Env, stripe: Stripe, p
   const prodigiOrderID = await prodigi.createOrder({
     merchantReference: intent.id,
     sku: product.prodigiSku,
+    attributes: product.attributes,
     imageURL,
     recipient: {
       name: shipping.name,
