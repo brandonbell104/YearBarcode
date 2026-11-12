@@ -268,7 +268,7 @@ struct CustomizeView: View {
                     Text(purchases.isUnlocked ? "Watermark removed" : "Remove watermark")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Theme.primaryText)
-                    Text(purchases.isUnlocked ? "Unlocked for every year and size" : "One-time purchase · every year and size")
+                    Text(purchases.isUnlocked ? (purchases.storeUnlocked ? "Unlocked for every year and size" : "Included with your print order") : "One-time purchase · every year and size")
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.secondaryText)
                 }

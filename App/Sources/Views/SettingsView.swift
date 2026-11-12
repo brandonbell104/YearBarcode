@@ -32,7 +32,7 @@ struct SettingsView: View {
                                     .background(Theme.control, in: RoundedRectangle(cornerRadius: 12))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Remove Watermark").font(.system(size: 15, weight: .semibold))
-                                    Text(purchases.isUnlocked ? "Purchased · every year and size" : "Not purchased · one-time purchase")
+                                    Text(purchases.storeUnlocked ? "Purchased · every year and size" : purchases.unlockedByPrint ? "Included with your print order" : "Not purchased · one-time purchase")
                                         .font(.system(size: 13))
                                         .foregroundStyle(Theme.secondaryText)
                                 }

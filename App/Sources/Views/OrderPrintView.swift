@@ -223,7 +223,7 @@ struct OrderPrintView: View {
             Text("Thank you!")
                 .font(.system(size: 28, weight: .heavy))
                 .foregroundStyle(Theme.primaryText)
-            Text("Your \(product?.title ?? "print") is on its way to the printer. A receipt is coming to \(email). You can follow printing and shipping any time.")
+            Text("Your \(product?.title ?? "print") is on its way to the printer. A receipt is coming to \(email). You can follow printing and shipping any time.\n\nAs a thank-you, the watermark is now removed from everything you save or share.")
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.bodyText)
             Button("View My Orders") { showingOrders = true }
@@ -320,6 +320,7 @@ struct OrderPrintView: View {
         let saved = SavedOrder(id: order.orderId, uploadToken: order.uploadToken, productTitle: "", posterTitle: "", amount: order.amount, createdAt: Date())
         if let status = try? await OrderService.shared.status(of: saved),
            status.payment == "succeeded" || status.payment == "processing" {
+            if status.payment == "succeeded" { model.purchases.unlockFromPrintOrder() }
             phase = .paid
         } else {
             phase = .readyToPay
@@ -336,6 +337,7 @@ struct OrderPrintView: View {
 
 /// Orders placed from this iPhone, with live payment, printing and tracking status.
 struct PrintOrdersView: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var orders = OrderStore.all()
@@ -400,6 +402,7 @@ struct PrintOrdersView: View {
             if let status = try? await OrderService.shared.status(of: order) {
                 statuses[order.id] = status
                 failed.remove(order.id)
+                if status.payment == "succeeded" { model.purchases.unlockFromPrintOrder() }
             } else {
                 failed.insert(order.id)
             }
